@@ -1,0 +1,1096 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>GRAVITAS — Scale → MIDI Controller</title>
+<meta name="description" content="USB scale to MIDI controller via WebHID, Web Serial, and Web MIDI API — supports DYMO S100, U.S. Solid Precision Balance, and generic USB scales"/>
+<meta name="theme-color" content="#c8f135"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="GRAVITAS"/>
+<link rel="manifest" href="manifest.json"/>
+<link rel="icon" href="favicon.svg" type="image/svg+xml"/>
+<link rel="apple-touch-icon" href="icon-192.svg"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Mono:wght@300;400;500&family=IBM+Plex+Sans:wght@300;400&display=swap" rel="stylesheet"/>
+<style>
+  /* ── Reset & Variables ────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #0a0a0b;
+    --surface:   #111114;
+    --border:    #1e1e24;
+    --accent:    #c8f135;       /* volt green */
+    --accent2:   #ff4d6d;       /* hot coral */
+    --dim:       #3a3a44;
+    --muted:     #6b6b7a;
+    --text:      #e8e8ec;
+    --mono:      'IBM Plex Mono', monospace;
+    --display:   'Bebas Neue', sans-serif;
+    --sans:      'IBM Plex Sans', sans-serif;
+  }
+
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    overflow-x: hidden;
+  }
+
+  /* ── Noise grain overlay ──────────────────────────────── */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
+    opacity: 0.028;
+    pointer-events: none;
+    z-index: 9999;
+  }
+
+  /* ── Layout ───────────────────────────────────────────── */
+  .app {
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    min-height: 100vh;
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 0 24px;
+  }
+
+  /* ── Header ───────────────────────────────────────────── */
+  header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    padding: 28px 0 20px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .logo {
+    font-family: var(--display);
+    font-size: 2.4rem;
+    letter-spacing: 0.08em;
+    color: var(--accent);
+    line-height: 1;
+  }
+
+  .logo span { color: var(--muted); font-size: 0.9rem; font-family: var(--mono); letter-spacing: 0.2em; margin-left: 12px; }
+
+  .status-bar {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    color: var(--muted);
+  }
+
+  .pill {
+    display: flex; align-items: center; gap: 6px;
+    padding: 4px 10px;
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    font-size: 0.68rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    transition: all 0.3s;
+  }
+  .pill.ok  { border-color: var(--accent); color: var(--accent); }
+  .pill.err { border-color: var(--accent2); color: var(--accent2); }
+  .pill .dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: currentColor;
+    animation: pulse 2s ease-in-out infinite;
+  }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+  .pill.err .dot { animation: none; }
+
+  /* ── Main Grid ────────────────────────────────────────── */
+  main {
+    display: grid;
+    grid-template-columns: 1fr 380px;
+    gap: 24px;
+    padding: 28px 0;
+    align-items: start;
+  }
+
+  /* ── Panel ────────────────────────────────────────────── */
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 24px;
+  }
+
+  .panel-title {
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 20px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* ── Weight Display ───────────────────────────────────── */
+  .weight-stage {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+    padding: 32px 0;
+  }
+
+  .weight-label {
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    letter-spacing: 0.3em;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+
+  .weight-value {
+    font-family: var(--display);
+    font-size: 9rem;
+    line-height: 0.9;
+    color: var(--text);
+    letter-spacing: -0.02em;
+    transition: color 0.15s;
+    min-width: 3ch;
+    text-align: center;
+  }
+  .weight-value.active { color: var(--accent); }
+
+  .weight-unit {
+    font-family: var(--display);
+    font-size: 2.2rem;
+    color: var(--dim);
+    letter-spacing: 0.1em;
+    margin-top: 4px;
+  }
+
+  /* ── MIDI Readout ─────────────────────────────────────── */
+  .midi-readout {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    margin-top: 24px;
+  }
+
+  .midi-cell {
+    background: var(--bg);
+    padding: 14px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .midi-cell-label {
+    font-family: var(--mono);
+    font-size: 0.6rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .midi-cell-value {
+    font-family: var(--mono);
+    font-size: 1.6rem;
+    font-weight: 500;
+    color: var(--accent);
+    letter-spacing: -0.02em;
+    transition: all 0.08s;
+  }
+
+  /* ── VU Bar ───────────────────────────────────────────── */
+  .vu-wrap {
+    margin-top: 20px;
+    position: relative;
+    height: 12px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    overflow: hidden;
+  }
+  .vu-fill {
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    background: var(--accent);
+    width: 0%;
+    transition: width 0.12s ease-out;
+    box-shadow: 0 0 20px var(--accent);
+  }
+  .vu-fill.high { background: var(--accent2); box-shadow: 0 0 20px var(--accent2); }
+
+  /* ── Controls ─────────────────────────────────────────── */
+  .control-group { margin-bottom: 22px; }
+
+  label {
+    display: block;
+    font-family: var(--mono);
+    font-size: 0.62rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+
+  .row { display: flex; gap: 8px; align-items: center; }
+
+  input[type=number], input[type=text], select {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 0.85rem;
+    padding: 8px 12px;
+    outline: none;
+    transition: border-color 0.2s;
+    -webkit-appearance: none;
+    border-radius: 0;
+  }
+  input:focus, select:focus { border-color: var(--accent); }
+
+  input[type=range] {
+    -webkit-appearance: none;
+    width: 100%;
+    height: 2px;
+    background: var(--dim);
+    outline: none;
+    cursor: pointer;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: pointer;
+    box-shadow: 0 0 8px var(--accent);
+  }
+  .range-labels {
+    display: flex; justify-content: space-between;
+    font-family: var(--mono); font-size: 0.6rem; color: var(--dim);
+    margin-top: 4px;
+  }
+
+  /* ── Buttons ──────────────────────────────────────────── */
+  .btn {
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    padding: 10px 18px;
+    border: 1px solid;
+    cursor: pointer;
+    transition: all 0.2s;
+    border-radius: 0;
+    background: transparent;
+  }
+  .btn-primary {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .btn-primary:hover {
+    background: var(--accent);
+    color: var(--bg);
+  }
+  .btn-danger {
+    border-color: var(--accent2);
+    color: var(--accent2);
+  }
+  .btn-danger:hover { background: var(--accent2); color: var(--bg); }
+  .btn-ghost { border-color: var(--dim); color: var(--muted); }
+  .btn-ghost:hover { border-color: var(--text); color: var(--text); }
+  .btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+  .btn-full { width: 100%; margin-top: 6px; }
+
+  /* ── CC Mapping cards ────────────────────────────────── */
+  .mapping-list { display: flex; flex-direction: column; gap: 8px; }
+
+  .mapping-card {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    padding: 12px 14px;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    transition: border-color 0.2s;
+  }
+  .mapping-card.active { border-color: var(--accent); }
+  .mapping-card .addr { color: var(--accent); }
+  .mapping-card .meta { color: var(--muted); font-size: 0.62rem; margin-top: 2px; }
+  .mapping-card .rm {
+    background: none; border: none; color: var(--dim);
+    cursor: pointer; font-size: 1rem; line-height: 1;
+    padding: 2px 6px;
+    transition: color 0.2s;
+  }
+  .mapping-card .rm:hover { color: var(--accent2); }
+
+  /* ── Log ──────────────────────────────────────────────── */
+  .log {
+    height: 120px;
+    overflow-y: auto;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    padding: 10px 12px;
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    line-height: 1.6;
+    color: var(--muted);
+  }
+  .log::-webkit-scrollbar { width: 4px; }
+  .log::-webkit-scrollbar-track { background: transparent; }
+  .log::-webkit-scrollbar-thumb { background: var(--dim); }
+  .log-line { display: flex; gap: 8px; }
+  .log-line .ts { color: var(--dim); flex-shrink: 0; }
+  .log-line.ok .msg { color: var(--accent); }
+  .log-line.err .msg { color: var(--accent2); }
+  .log-line.midi .msg { color: #7eb8f7; }
+
+  /* ── Footer ───────────────────────────────────────────── */
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 16px 0;
+    font-family: var(--mono);
+    font-size: 0.6rem;
+    color: var(--dim);
+    display: flex;
+    justify-content: space-between;
+    letter-spacing: 0.1em;
+  }
+
+  /* ── Responsive ───────────────────────────────────────── */
+  @media (max-width: 780px) {
+    main { grid-template-columns: 1fr; }
+    .weight-value { font-size: 6rem; }
+  }
+
+  /* ── Scale connect area ───────────────────────────────── */
+  .connect-area {
+    display: flex; gap: 8px; flex-direction: column;
+  }
+
+  .divider {
+    height: 1px; background: var(--border); margin: 18px 0;
+  }
+
+  select option { background: var(--surface); }
+
+  .tag {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 0.58rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding: 2px 6px;
+    border: 1px solid var(--dim);
+    color: var(--dim);
+    margin-left: 4px;
+    vertical-align: middle;
+  }
+  .tag.live { border-color: var(--accent); color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ── Header ────────────────────────────────────────── -->
+  <header>
+    <div class="logo">GRAVITAS <span>Scale → MIDI</span></div>
+    <div class="status-bar">
+      <div class="pill" id="pill-hid">
+        <div class="dot"></div>
+        <span id="pill-hid-text">HID Disconnected</span>
+      </div>
+      <div class="pill" id="pill-midi">
+        <div class="dot"></div>
+        <span id="pill-midi-text">MIDI Disconnected</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ── Main ──────────────────────────────────────────── -->
+  <main>
+
+    <!-- Left: Visualisation -->
+    <div>
+      <div class="panel">
+        <div class="panel-title">Live Weight Reading</div>
+
+        <div class="weight-stage">
+          <div class="weight-label">Current Weight</div>
+          <div class="weight-value" id="weight-display">0</div>
+          <div class="weight-unit" id="unit-display">g</div>
+        </div>
+
+        <div class="midi-readout">
+          <div class="midi-cell">
+            <div class="midi-cell-label">MIDI Val</div>
+            <div class="midi-cell-value" id="midi-val">0</div>
+          </div>
+          <div class="midi-cell">
+            <div class="midi-cell-label">Float (0–1)</div>
+            <div class="midi-cell-value" id="midi-float">0.000</div>
+          </div>
+          <div class="midi-cell">
+            <div class="midi-cell-label">MIDI Sent</div>
+            <div class="midi-cell-value" id="osc-count">0</div>
+          </div>
+        </div>
+
+        <div class="vu-wrap" style="margin-top:16px;">
+          <div class="vu-fill" id="vu-fill"></div>
+        </div>
+
+        <div style="margin-top:24px;">
+          <div class="panel-title" style="margin-bottom:12px;">MIDI Log</div>
+          <div class="log" id="log"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: Controls -->
+    <div style="display:flex;flex-direction:column;gap:16px;">
+
+      <!-- Scale Connection -->
+      <div class="panel">
+        <div class="panel-title">Scale Connection <span class="tag" id="hid-tag">Disconnected</span></div>
+
+        <div class="connect-area">
+          <div class="control-group" style="margin-bottom:8px;">
+            <label>Scale Type</label>
+            <select id="scale-type-select">
+              <option value="dymo">DYMO S100 Postal Scale (USB HID)</option>
+              <option value="ussolid">U.S. Solid Precision Balance (Serial)</option>
+              <option value="generic-hid">Generic USB Scale (HID)</option>
+              <option value="generic-serial">Generic USB Scale (Serial)</option>
+            </select>
+          </div>
+          <!-- Serial-only: baud rate -->
+          <div class="control-group" id="serial-options" style="display:none;margin-bottom:8px;">
+            <label>Baud Rate</label>
+            <select id="baud-rate-select">
+              <option value="1200">1200</option>
+              <option value="2400">2400</option>
+              <option value="4800">4800</option>
+              <option value="9600" selected>9600</option>
+              <option value="19200">19200</option>
+              <option value="38400">38400</option>
+              <option value="57600">57600</option>
+              <option value="115200">115200</option>
+            </select>
+          </div>
+          <button class="btn btn-primary btn-full" id="btn-connect-scale">
+            Connect Scale
+          </button>
+          <button class="btn btn-danger btn-full" id="btn-disconnect-scale" disabled>
+            Disconnect Scale
+          </button>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="control-group">
+          <label>Unit</label>
+          <select id="unit-select">
+            <option value="g">Grams (g)</option>
+            <option value="oz">Ounces (oz)</option>
+            <option value="lb">Pounds (lb)</option>
+          </select>
+        </div>
+
+        <div class="control-group">
+          <label>Weight Range → MIDI 0–127</label>
+          <div class="row">
+            <div style="flex:1">
+              <input type="number" id="range-min" value="0" min="0" placeholder="Min g"/>
+            </div>
+            <span style="color:var(--dim);font-family:var(--mono);font-size:0.8rem;flex-shrink:0;padding:0 4px">→</span>
+            <div style="flex:1">
+              <input type="number" id="range-max" value="500" min="1" placeholder="Max g"/>
+            </div>
+          </div>
+          <div class="range-labels"><span>MIDI 0</span><span>MIDI 127</span></div>
+        </div>
+
+        <div class="control-group">
+          <label>Smoothing <span id="smooth-val" style="color:var(--text)">3</span></label>
+          <input type="range" id="smooth" min="1" max="20" value="3"/>
+          <div class="range-labels"><span>Raw</span><span>Heavy</span></div>
+        </div>
+
+        <div class="control-group">
+          <label>Poll Rate (ms) <span id="poll-val" style="color:var(--text)">80</span></label>
+          <input type="range" id="poll-rate" min="20" max="500" value="80" step="10"/>
+          <div class="range-labels"><span>20ms</span><span>500ms</span></div>
+        </div>
+      </div>
+
+      <!-- MIDI Output -->
+      <div class="panel">
+        <div class="panel-title">MIDI Output <span class="tag" id="midi-tag">Web MIDI</span></div>
+
+        <button class="btn btn-primary btn-full" id="btn-connect-midi">
+          Request MIDI Access
+        </button>
+
+        <div class="control-group" style="margin-top:14px;">
+          <label>Output Device</label>
+          <div class="row">
+            <select id="midi-output-select" style="flex:1;width:auto">
+              <option value="">— connect MIDI first —</option>
+            </select>
+            <button class="btn btn-ghost" id="btn-select-midi" style="flex-shrink:0">Select</button>
+          </div>
+          <div style="font-family:var(--mono);font-size:0.6rem;color:var(--muted);margin-top:6px;">
+            Mac IAC Driver appears here after enabling in Audio MIDI Setup
+          </div>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="panel-title" style="margin-bottom:12px;">CC Mappings</div>
+        <div class="mapping-list" id="mapping-list"></div>
+
+        <!-- Add mapping -->
+        <div style="margin-top:12px;">
+          <div class="row" style="gap:8px;align-items:flex-end;">
+            <div style="flex:1;">
+              <label>Channel</label>
+              <input type="number" id="new-channel" value="1" min="1" max="16"/>
+            </div>
+            <div style="flex:2;">
+              <label>CC Number</label>
+              <input type="number" id="new-cc" value="1" min="0" max="127"/>
+            </div>
+            <button class="btn btn-ghost" id="btn-add-mapping" style="flex-shrink:0;">+ Add</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <footer>
+    <span>GRAVITAS v2.1 — WebHID + Web Serial + Web MIDI</span>
+    <span>Requires Chrome/Edge + IAC DRIVER · built by Max Fishman</span>
+  </footer>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+//  SERVICE WORKER REGISTRATION
+// ═══════════════════════════════════════════════════════════
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./sw.js').catch(() => {});
+}
+
+// ═══════════════════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════════════════
+const state = {
+  // Scale connection (HID or Serial — only one active at a time)
+  hidDevice: null,
+  serialPort: null,
+  serialReader: null,
+  serialReadable: null,
+  connectionType: null,   // 'hid' | 'serial' | null
+
+  midiAccess: null,
+  midiOutput: null,
+  weightRaw: 0,
+  weightSmoothed: 0,
+  weightHistory: [],
+  midiValue: 0,
+  floatValue: 0,
+  midiSentCount: 0,
+  pollTimer: null,
+  mappings: [
+    { id: 1, channel: 1, cc: 1,  label: 'Ch 1  CC 1'  },
+    { id: 2, channel: 1, cc: 7,  label: 'Ch 1  CC 7'  },
+  ],
+  nextMappingId: 3,
+};
+
+// ═══════════════════════════════════════════════════════════
+//  DOM REFS
+// ═══════════════════════════════════════════════════════════
+const $ = id => document.getElementById(id);
+const weightDisplay = $('weight-display');
+const unitDisplay   = $('unit-display');
+const midiVal       = $('midi-val');
+const midiFloat     = $('midi-float');
+const midiCount     = $('osc-count');
+const vuFill        = $('vu-fill');
+const logEl         = $('log');
+const mappingList   = $('mapping-list');
+
+// ═══════════════════════════════════════════════════════════
+//  LOGGING
+// ═══════════════════════════════════════════════════════════
+function log(msg, type = '') {
+  const now = new Date();
+  const ts = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
+  const line = document.createElement('div');
+  line.className = `log-line ${type}`;
+  line.innerHTML = `<span class="ts">${ts}</span><span class="msg">${msg}</span>`;
+  logEl.appendChild(line);
+  logEl.scrollTop = logEl.scrollHeight;
+  while (logEl.children.length > 200) logEl.removeChild(logEl.firstChild);
+}
+
+// ═══════════════════════════════════════════════════════════
+//  SCALE PROFILES
+//  HID scales use WebHID; serial scales use Web Serial API.
+// ═══════════════════════════════════════════════════════════
+const SCALE_PROFILES = {
+  dymo: {
+    name: 'DYMO S100',
+    type: 'hid',
+    vendorId: 0x0922,
+    productId: 0x8003,
+  },
+  ussolid: {
+    name: 'U.S. Solid Precision Balance',
+    type: 'serial',
+    defaultBaud: 9600,
+  },
+  'generic-hid': {
+    name: 'Generic USB Scale (HID)',
+    type: 'hid',
+    vendorId: null,
+    productId: null,
+  },
+  'generic-serial': {
+    name: 'Generic USB Scale (Serial)',
+    type: 'serial',
+    defaultBaud: 9600,
+  },
+};
+
+// USB HID Usage Page for Weighing Devices (0x8D)
+const HID_USAGE_PAGE_SCALE = 0x008D;
+
+// Show/hide serial options when scale type changes
+$('scale-type-select').addEventListener('change', () => {
+  const profile = SCALE_PROFILES[$('scale-type-select').value];
+  $('serial-options').style.display = profile.type === 'serial' ? '' : 'none';
+  if (profile.defaultBaud) $('baud-rate-select').value = profile.defaultBaud;
+});
+
+$('btn-connect-scale').addEventListener('click', connectScale);
+$('btn-disconnect-scale').addEventListener('click', disconnectScale);
+
+// ── Unified connect ──────────────────────────────────────
+async function connectScale() {
+  const scaleType = $('scale-type-select').value;
+  const profile = SCALE_PROFILES[scaleType];
+
+  if (profile.type === 'hid') {
+    await connectHID(profile);
+  } else {
+    await connectSerial(profile);
+  }
+}
+
+// ── Unified disconnect ───────────────────────────────────
+async function disconnectScale() {
+  stopPolling();
+  if (state.connectionType === 'hid') {
+    await disconnectHID();
+  } else if (state.connectionType === 'serial') {
+    await disconnectSerial();
+  }
+  state.connectionType = null;
+  setPillStatus('hid', false, 'Disconnected');
+  $('btn-connect-scale').disabled = false;
+  $('btn-disconnect-scale').disabled = true;
+  $('scale-type-select').disabled = false;
+  $('hid-tag').textContent = 'Disconnected';
+  $('hid-tag').classList.remove('live');
+  log('Scale disconnected');
+  updateDisplay(0, 'g');
+}
+
+function onScaleConnected(label) {
+  setPillStatus('hid', true, label);
+  $('btn-connect-scale').disabled = true;
+  $('btn-disconnect-scale').disabled = false;
+  $('scale-type-select').disabled = true;
+  $('hid-tag').textContent = 'LIVE';
+  $('hid-tag').classList.add('live');
+  startPolling();
+}
+
+// ═══════════════════════════════════════════════════════════
+//  WebHID CONNECTION (DYMO, generic HID scales)
+// ═══════════════════════════════════════════════════════════
+async function connectHID(profile) {
+  if (!navigator.hid) {
+    log('WebHID not supported — use Chrome/Edge', 'err');
+    return;
+  }
+  try {
+    const filters = [];
+    if (profile.vendorId) {
+      const f = { vendorId: profile.vendorId };
+      if (profile.productId) f.productId = profile.productId;
+      filters.push(f);
+    }
+    const requestOpts = filters.length
+      ? { filters }
+      : { filters: [{ usagePage: HID_USAGE_PAGE_SCALE }] };
+
+    const devices = await navigator.hid.requestDevice(requestOpts);
+    if (!devices.length) { log('No scale selected', 'err'); return; }
+    const device = devices[0];
+    await device.open();
+    state.hidDevice = device;
+    state.connectionType = 'hid';
+
+    device.addEventListener('inputreport', onHIDReport);
+    const label = device.productName || profile.name;
+    log(`Connected (HID): ${label} (${device.vendorId.toString(16)}:${device.productId.toString(16)})`, 'ok');
+    onScaleConnected(label);
+  } catch (e) {
+    log(`HID error: ${e.message}`, 'err');
+  }
+}
+
+async function disconnectHID() {
+  if (state.hidDevice) {
+    state.hidDevice.removeEventListener('inputreport', onHIDReport);
+    await state.hidDevice.close().catch(() => {});
+    state.hidDevice = null;
+  }
+}
+
+function onHIDReport(event) {
+  // Standard USB HID scale report format (6 bytes):
+  // [0] report id, [1] status flags, [2] unit code,
+  // [3] scaling (negative = decimal places), [4] weightLo, [5] weightHi
+  const data = event.data;
+  if (data.byteLength < 6) return;
+
+  const scaling   = data.getInt8(3);
+  const weightRaw = data.getUint8(4) + (data.getUint8(5) << 8);
+
+  state.weightRaw = scaling < 0
+    ? weightRaw / Math.pow(10, -scaling)
+    : weightRaw * Math.pow(10, scaling);
+}
+
+// ═══════════════════════════════════════════════════════════
+//  WEB SERIAL CONNECTION (U.S. Solid, generic serial scales)
+//
+//  U.S. Solid Precision Balance transmits ASCII lines over
+//  a virtual COM port (CH340 / CP2102 / FTDI chip).
+//  Typical line formats:
+//    "ST,GS,+  123.45,g\r\n"   (stable, gross, positive)
+//    "US,GS,+  123.45,g\r\n"   (unstable)
+//    "+  123.45 g\r\n"          (simple format)
+//    "   0.00 g\r\n"
+//
+//  The parser below extracts the first decimal number found
+//  in each line, making it tolerant of format variations.
+// ═══════════════════════════════════════════════════════════
+async function connectSerial(profile) {
+  if (!navigator.serial) {
+    log('Web Serial API not supported — use Chrome/Edge', 'err');
+    return;
+  }
+  try {
+    const port = await navigator.serial.requestPort();
+    const baudRate = parseInt($('baud-rate-select').value) || profile.defaultBaud || 9600;
+    await port.open({ baudRate });
+
+    state.serialPort = port;
+    state.connectionType = 'serial';
+
+    log(`Connected (Serial): ${profile.name} @ ${baudRate} baud`, 'ok');
+    onScaleConnected(profile.name);
+
+    // Start background serial reader
+    readSerialLoop(port);
+  } catch (e) {
+    log(`Serial error: ${e.message}`, 'err');
+  }
+}
+
+async function readSerialLoop(port) {
+  const decoder = new TextDecoderStream();
+  state.serialReadable = port.readable.pipeThrough(decoder);
+  state.serialReader = state.serialReadable.getReader();
+  let lineBuf = '';
+
+  try {
+    while (true) {
+      const { value, done } = await state.serialReader.read();
+      if (done) break;
+      lineBuf += value;
+      // Split on newlines
+      const lines = lineBuf.split(/\r?\n/);
+      lineBuf = lines.pop(); // keep incomplete tail
+      for (const line of lines) {
+        if (line.trim()) parseSerialLine(line);
+      }
+    }
+  } catch (e) {
+    // Reader cancelled during disconnect — expected
+    if (state.connectionType === 'serial') {
+      log(`Serial connection interrupted: ${e.message} — try reconnecting`, 'err');
+    }
+  }
+}
+
+function parseSerialLine(line) {
+  // Extract numeric weight from common serial scale formats.
+  // Handles:
+  //   "ST,GS,+  123.45,g"   → 123.45
+  //   "US,GS,-  0.02,g"     → -0.02
+  //   "+  123.45 g"          → 123.45
+  //   "  0.00 g"             → 0
+  //   "123.45"               → 123.45
+  const m = line.match(/([+-]?\d+\.?\d*)/);
+  if (m) {
+    const val = parseFloat(m[1]);
+    if (!isNaN(val)) {
+      state.weightRaw = val;
+    }
+  }
+}
+
+async function disconnectSerial() {
+  if (state.serialReader) {
+    await state.serialReader.cancel().catch(() => {});
+    state.serialReader = null;
+  }
+  if (state.serialPort) {
+    await state.serialPort.close().catch(() => {});
+    state.serialPort = null;
+  }
+  state.serialReadable = null;
+}
+
+// ═══════════════════════════════════════════════════════════
+//  POLLING & SMOOTHING
+// ═══════════════════════════════════════════════════════════
+function startPolling() {
+  stopPolling();
+  const ms = parseInt($('poll-rate').value);
+  state.pollTimer = setInterval(processWeight, ms);
+}
+
+function stopPolling() {
+  if (state.pollTimer) { clearInterval(state.pollTimer); state.pollTimer = null; }
+}
+
+function processWeight() {
+  const smoothN = parseInt($('smooth').value);
+  const unit = $('unit-select').value;
+
+  // Convert to grams for internal range math
+  let weightG = state.weightRaw;
+  if (unit === 'oz') weightG = state.weightRaw * 28.3495;
+  if (unit === 'lb') weightG = state.weightRaw * 453.592;
+
+  // Smooth
+  state.weightHistory.push(weightG);
+  if (state.weightHistory.length > smoothN) state.weightHistory.shift();
+  const avg = state.weightHistory.reduce((a,b)=>a+b,0) / state.weightHistory.length;
+  state.weightSmoothed = avg;
+
+  const minG = parseFloat($('range-min').value) || 0;
+  const maxG = parseFloat($('range-max').value) || 500;
+
+  const clamped = Math.max(minG, Math.min(maxG, avg));
+  const norm = maxG > minG ? (clamped - minG) / (maxG - minG) : 0;
+  const midi = Math.round(norm * 127);
+
+  state.floatValue = norm;
+  state.midiValue  = midi;
+
+  updateDisplay(state.weightRaw, unit, norm, midi);
+  sendMIDI(midi);
+}
+
+function updateDisplay(weight, unit, norm=0, midi=0) {
+  const isActive = weight > 0;
+  weightDisplay.textContent = weight % 1 === 0 ? weight : weight.toFixed(1);
+  weightDisplay.classList.toggle('active', isActive);
+  unitDisplay.textContent = unit;
+  midiVal.textContent = midi;
+  midiFloat.textContent = norm.toFixed(3);
+
+  const pct = norm * 100;
+  vuFill.style.width = pct + '%';
+  vuFill.classList.toggle('high', pct > 85);
+}
+
+// ═══════════════════════════════════════════════════════════
+//  WEB MIDI
+// ═══════════════════════════════════════════════════════════
+$('btn-connect-midi').addEventListener('click', connectMIDI);
+$('btn-select-midi').addEventListener('click', selectMIDIOutput);
+
+async function connectMIDI() {
+  if (!navigator.requestMIDIAccess) {
+    log('Web MIDI API not supported — use Chrome/Edge', 'err');
+    return;
+  }
+  try {
+    state.midiAccess = await navigator.requestMIDIAccess({ sysex: false });
+    refreshMIDIOutputs();
+    state.midiAccess.onstatechange = refreshMIDIOutputs;
+    $('btn-connect-midi').textContent = 'Refresh Devices';
+    log('MIDI access granted — select an output device', 'ok');
+  } catch(e) {
+    log(`MIDI error: ${e.message}`, 'err');
+  }
+}
+
+function refreshMIDIOutputs() {
+  const sel = $('midi-output-select');
+  const prev = sel.value;
+  sel.innerHTML = '<option value="">— select output —</option>';
+  for (const [id, output] of state.midiAccess.outputs) {
+    const opt = document.createElement('option');
+    opt.value = id;
+    opt.textContent = output.name;
+    if (id === prev) opt.selected = true;
+    sel.appendChild(opt);
+  }
+  // Re-validate current output
+  if (state.midiOutput) {
+    const stillExists = state.midiAccess.outputs.has(state.midiOutput.id);
+    if (!stillExists) {
+      state.midiOutput = null;
+      setPillStatus('midi', false, 'MIDI Disconnected');
+      $('midi-tag').textContent = 'Web MIDI';
+      $('midi-tag').classList.remove('live');
+    }
+  }
+}
+
+function selectMIDIOutput() {
+  if (!state.midiAccess) {
+    log('Request MIDI access first', 'err');
+    return;
+  }
+  const id = $('midi-output-select').value;
+  if (!id) {
+    log('Select an output device from the list', 'err');
+    return;
+  }
+  state.midiOutput = state.midiAccess.outputs.get(id) || null;
+  if (state.midiOutput) {
+    setPillStatus('midi', true, state.midiOutput.name);
+    $('midi-tag').textContent = 'LIVE';
+    $('midi-tag').classList.add('live');
+    log(`MIDI output selected: ${state.midiOutput.name}`, 'ok');
+  } else {
+    setPillStatus('midi', false, 'MIDI Disconnected');
+    log('Could not open MIDI output', 'err');
+  }
+}
+
+function sendMIDI(midiValue) {
+  if (!state.midiOutput || state.mappings.length === 0) return;
+
+  state.mappings.forEach(m => {
+    const channel = Math.max(1, Math.min(16, m.channel)) - 1;  // 0-indexed
+    const cc      = Math.max(0, Math.min(127, m.cc));
+    const value   = Math.max(0, Math.min(127, midiValue));
+    state.midiOutput.send([0xB0 | channel, cc, value]);
+    state.midiSentCount++;
+  });
+
+  midiCount.textContent = state.midiSentCount;
+  log(`MIDI CC → ${state.mappings.map(m=>`Ch${m.channel} CC${m.cc}`).join(', ')} [${midiValue}]`, 'midi');
+}
+
+// ═══════════════════════════════════════════════════════════
+//  MAPPINGS UI
+// ═══════════════════════════════════════════════════════════
+function renderMappings() {
+  mappingList.innerHTML = '';
+  state.mappings.forEach(m => {
+    const card = document.createElement('div');
+    card.className = 'mapping-card';
+    card.innerHTML = `
+      <div>
+        <div class="addr">Ch ${m.channel}  ·  CC ${m.cc}</div>
+        <div class="meta">MIDI Control Change · 0–127</div>
+      </div>
+      <button class="rm" data-id="${m.id}" title="Remove">×</button>
+    `;
+    card.querySelector('.rm').addEventListener('click', () => {
+      state.mappings = state.mappings.filter(x => x.id !== m.id);
+      renderMappings();
+    });
+    mappingList.appendChild(card);
+  });
+}
+
+$('btn-add-mapping').addEventListener('click', () => {
+  const channel = parseInt($('new-channel').value) || 1;
+  const cc      = parseInt($('new-cc').value);
+  if (isNaN(cc) || cc < 0 || cc > 127) { log('CC number must be 0–127', 'err'); return; }
+  if (channel < 1 || channel > 16)     { log('Channel must be 1–16', 'err'); return; }
+  state.mappings.push({ id: state.nextMappingId++, channel, cc, label: `Ch ${channel} CC ${cc}` });
+  renderMappings();
+  log(`Added mapping: Ch ${channel}  CC ${cc}`, 'ok');
+});
+
+// ═══════════════════════════════════════════════════════════
+//  UI HELPERS
+// ═══════════════════════════════════════════════════════════
+function setPillStatus(which, ok, text) {
+  const pill = $(`pill-${which}`);
+  const span = $(`pill-${which}-text`);
+  pill.classList.toggle('ok', ok);
+  pill.classList.toggle('err', !ok);
+  span.textContent = text;
+}
+
+// Live range display
+$('smooth').addEventListener('input', e => { $('smooth-val').textContent = e.target.value; });
+$('poll-rate').addEventListener('input', e => {
+  $('poll-val').textContent = e.target.value;
+  if (state.connectionType) startPolling(); // restart with new rate
+});
+$('unit-select').addEventListener('change', () => { state.weightHistory = []; });
+
+// ═══════════════════════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════════════════════
+renderMappings();
+log('GRAVITAS ready — connect scale and MIDI output to begin', 'ok');
+setPillStatus('hid', false, 'Disconnected');
+setPillStatus('midi', false, 'MIDI Disconnected');
+
+if (!navigator.hid && !navigator.serial) {
+  log('⚠ Neither WebHID nor Web Serial available — use Chrome or Edge', 'err');
+  $('btn-connect-scale').disabled = true;
+} else {
+  if (!navigator.hid)    log('ℹ WebHID not available — HID scales will not work');
+  if (!navigator.serial) log('ℹ Web Serial not available — serial scales will not work');
+}
+if (!navigator.requestMIDIAccess) {
+  log('⚠ Web MIDI not available — use Chrome or Edge', 'err');
+  $('btn-connect-midi').disabled = true;
+}
+</script>
+</body>
+</html>

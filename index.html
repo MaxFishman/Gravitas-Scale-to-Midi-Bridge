@@ -3,1094 +3,729 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>GRAVITAS — Scale → MIDI Controller</title>
-<meta name="description" content="USB scale to MIDI controller via WebHID, Web Serial, and Web MIDI API — supports DYMO S100, U.S. Solid Precision Balance, and generic USB scales"/>
-<meta name="theme-color" content="#c8f135"/>
-<meta name="apple-mobile-web-app-capable" content="yes"/>
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
-<meta name="apple-mobile-web-app-title" content="GRAVITAS"/>
-<link rel="manifest" href="manifest.json"/>
+<title>GRAVITAS — Play the weight of things</title>
+<meta name="description" content="GRAVITAS turns any USB precision scale into a professional weight-to-MIDI performance controller for Ableton Live and any DAW. A new instrument built from gravity."/>
+<meta name="theme-color" content="#09090a"/>
 <link rel="icon" href="favicon.svg" type="image/svg+xml"/>
 <link rel="apple-touch-icon" href="icon-192.svg"/>
+
+<meta property="og:title" content="GRAVITAS — Play the weight of things"/>
+<meta property="og:description" content="Turn physical mass into musical control. A weight-to-MIDI performance controller for every DAW."/>
+<meta property="og:type" content="website"/>
+
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
-<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Mono:wght@300;400;500&family=IBM+Plex+Sans:wght@300;400&display=swap" rel="stylesheet"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:opsz,wght@10..72,500;10..72,700;10..72,900&family=IBM+Plex+Mono:wght@300;400;500&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+
 <style>
-  /* ── Reset & Variables ────────────────────────────────── */
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+/* ══════════════════════════════════════════════════════════════
+   GRAVITAS — landing / purchase page
+   Concept: gravimetric instrument spec-plate.
+   Signature: scroll loads the scale (the product's own gesture).
+   ══════════════════════════════════════════════════════════════ */
 
-  :root {
-    --bg:        #0a0a0b;
-    --surface:   #111114;
-    --border:    #1e1e24;
-    --accent:    #c8f135;       /* volt green */
-    --accent2:   #ff4d6d;       /* hot coral */
-    --dim:       #3a3a44;
-    --muted:     #6b6b7a;
-    --text:      #e8e8ec;
-    --mono:      'IBM Plex Mono', monospace;
-    --display:   'Bebas Neue', sans-serif;
-    --sans:      'IBM Plex Sans', sans-serif;
-  }
+*,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
 
-  html, body {
-    height: 100%;
-    background: var(--bg);
-    color: var(--text);
-    font-family: var(--sans);
-    overflow-x: hidden;
-  }
+:root{
+  --void:    #09090a;   /* base */
+  --graphite:#141418;   /* panels */
+  --graphite2:#1a1a1f;
+  --steel:   #2a2a33;   /* hairlines */
+  --volt:    #c8f135;   /* live signal (brand) */
+  --load:    #ff4d6d;   /* overload (brand) */
+  --paper:   #ece7da;   /* warm engraved label — the signature tone */
+  --mercury: #83838f;   /* muted */
+  --faint:   #46464f;
 
-  /* ── Noise grain overlay ──────────────────────────────── */
-  body::before {
-    content: '';
-    position: fixed; inset: 0;
-    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
-    opacity: 0.028;
-    pointer-events: none;
-    z-index: 9999;
-  }
+  --display:'Big Shoulders Display', 'Arial Narrow', sans-serif;
+  --mono:'IBM Plex Mono', ui-monospace, monospace;
+  --sans:'IBM Plex Sans', system-ui, sans-serif;
 
-  /* ── Layout ───────────────────────────────────────────── */
-  .app {
-    display: grid;
-    grid-template-rows: auto 1fr auto;
-    min-height: 100vh;
-    max-width: 1100px;
-    margin: 0 auto;
-    padding: 0 24px;
-  }
+  --wrap: 1180px;
+  --gutter: clamp(20px, 5vw, 64px);
+}
 
-  /* ── Header ───────────────────────────────────────────── */
-  header {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    padding: 28px 0 20px;
-    border-bottom: 1px solid var(--border);
-  }
+html{ scroll-behavior:smooth; }
+body{
+  background:var(--void);
+  color:var(--paper);
+  font-family:var(--sans);
+  font-weight:300;
+  line-height:1.6;
+  -webkit-font-smoothing:antialiased;
+  overflow-x:hidden;
+}
 
-  .logo {
-    font-family: var(--display);
-    font-size: 2.4rem;
-    letter-spacing: 0.08em;
-    color: var(--accent);
-    line-height: 1;
-  }
+/* engraved baseplate grain */
+body::before{
+  content:''; position:fixed; inset:0; z-index:0; pointer-events:none;
+  background:
+    radial-gradient(1200px 600px at 78% -5%, rgba(200,241,53,.055), transparent 60%),
+    radial-gradient(900px 500px at 0% 15%, rgba(255,77,109,.04), transparent 55%);
+}
+body::after{
+  content:''; position:fixed; inset:0; z-index:0; pointer-events:none; opacity:.03;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
 
-  .logo span { color: var(--muted); font-size: 0.9rem; font-family: var(--mono); letter-spacing: 0.2em; margin-left: 12px; }
+a{ color:inherit; text-decoration:none; }
+img,svg{ display:block; max-width:100%; }
 
-  .status-bar {
-    display: flex;
-    gap: 16px;
-    align-items: center;
-    font-family: var(--mono);
-    font-size: 0.72rem;
-    color: var(--muted);
-  }
+.wrap{ width:100%; max-width:var(--wrap); margin:0 auto; padding-inline:var(--gutter); position:relative; z-index:1; }
 
-  .pill {
-    display: flex; align-items: center; gap: 6px;
-    padding: 4px 10px;
-    border: 1px solid var(--border);
-    border-radius: 2px;
-    font-size: 0.68rem;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    transition: all 0.3s;
-  }
-  .pill.ok  { border-color: var(--accent); color: var(--accent); }
-  .pill.err { border-color: var(--accent2); color: var(--accent2); }
-  .pill .dot {
-    width: 6px; height: 6px; border-radius: 50%;
-    background: currentColor;
-    animation: pulse 2s ease-in-out infinite;
-  }
-  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
-  .pill.err .dot { animation: none; }
+/* type utilities */
+.eyebrow{
+  font-family:var(--mono); font-size:.68rem; font-weight:400;
+  letter-spacing:.34em; text-transform:uppercase; color:var(--volt);
+  display:inline-flex; align-items:center; gap:10px;
+}
+.eyebrow::before{ content:''; width:26px; height:1px; background:var(--volt); opacity:.7; }
+.spec-label{
+  font-family:var(--mono); font-size:.6rem; letter-spacing:.26em;
+  text-transform:uppercase; color:var(--mercury);
+}
 
-  /* ── Main Grid ────────────────────────────────────────── */
-  main {
-    display: grid;
-    grid-template-columns: 1fr 380px;
-    gap: 24px;
-    padding: 28px 0;
-    align-items: start;
-  }
+/* ── scroll load-gauge (top) ─────────────────────────────── */
+.load-gauge{
+  position:fixed; inset:0 0 auto 0; height:3px; z-index:120;
+  background:linear-gradient(90deg,var(--volt),var(--load));
+  transform:scaleX(0); transform-origin:left;
+}
+@keyframes gauge-fill{ from{transform:scaleX(0)} to{transform:scaleX(1)} }
+@supports (animation-timeline: scroll()){
+  .load-gauge{ animation:gauge-fill linear both; animation-timeline:scroll(root block); }
+}
 
-  /* ── Panel ────────────────────────────────────────────── */
-  .panel {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    padding: 24px;
-  }
+/* ── header ──────────────────────────────────────────────── */
+.site-header{
+  position:sticky; top:0; z-index:110;
+  display:flex; align-items:center; justify-content:space-between; gap:20px;
+  padding-block:22px;
+  border-bottom:1px solid transparent;
+  backdrop-filter:blur(0px);
+}
+@keyframes header-shrink{
+  from{ padding-block:22px; background:transparent; border-color:transparent; backdrop-filter:blur(0px); }
+  to{ padding-block:11px; background:rgba(9,9,10,.82); border-color:var(--steel); backdrop-filter:blur(10px); }
+}
+@supports (animation-timeline: scroll()){
+  .site-header{ animation:header-shrink linear both; animation-timeline:scroll(root block); animation-range:0 180px; }
+}
+.brand{ display:flex; align-items:center; gap:12px; }
+.brand svg{ width:28px; height:28px; }
+.brand .name{
+  font-family:var(--display); font-weight:900; font-size:1.5rem;
+  letter-spacing:.06em; line-height:1; color:var(--paper);
+}
+.nav{ display:flex; align-items:center; gap:28px; }
+.nav a{ font-family:var(--mono); font-size:.72rem; letter-spacing:.14em; text-transform:uppercase; color:var(--mercury); transition:color .2s; }
+.nav a:hover{ color:var(--paper); }
+.nav .divider{ width:1px; height:18px; background:var(--steel); }
+@media (max-width:860px){ .nav .hide-sm{ display:none; } }
 
-  .panel-title {
-    font-family: var(--mono);
-    font-size: 0.65rem;
-    letter-spacing: 0.25em;
-    text-transform: uppercase;
-    color: var(--muted);
-    margin-bottom: 20px;
-    padding-bottom: 12px;
-    border-bottom: 1px solid var(--border);
-  }
+/* ── buttons ─────────────────────────────────────────────── */
+.btn{
+  display:inline-flex; align-items:center; gap:10px;
+  font-family:var(--mono); font-size:.74rem; font-weight:500;
+  letter-spacing:.16em; text-transform:uppercase;
+  padding:13px 22px; border:1px solid var(--steel); color:var(--paper);
+  background:transparent; cursor:pointer; transition:all .22s ease; border-radius:0;
+}
+.btn:hover{ border-color:var(--paper); }
+.btn-primary{ background:var(--volt); color:#0b0b05; border-color:var(--volt); font-weight:500; }
+.btn-primary:hover{ background:#d7ff44; border-color:#d7ff44; box-shadow:0 0 0 1px var(--volt), 0 10px 40px -12px rgba(200,241,53,.6); color:#0b0b05; }
+.btn-sm{ padding:9px 16px; font-size:.68rem; }
+.btn .arr{ transition:transform .22s ease; }
+.btn:hover .arr{ transform:translateX(4px); }
 
-  /* ── Weight Display ───────────────────────────────────── */
-  .weight-stage {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0;
-    padding: 32px 0;
-  }
+/* ── sections ────────────────────────────────────────────── */
+.section{ padding-block:clamp(72px,11vw,150px); position:relative; }
+.section-head{ max-width:720px; margin-bottom:clamp(40px,6vw,72px); }
+.section-head h2{
+  font-family:var(--display); font-weight:700; letter-spacing:.01em;
+  font-size:clamp(2.2rem,5.2vw,4rem); line-height:.98; margin-top:18px; color:var(--paper);
+  text-transform:uppercase;
+}
+.section-head p{ margin-top:22px; color:var(--mercury); font-size:1.05rem; max-width:60ch; }
 
-  .weight-label {
-    font-family: var(--mono);
-    font-size: 0.65rem;
-    letter-spacing: 0.3em;
-    color: var(--muted);
-    text-transform: uppercase;
-    margin-bottom: 8px;
-  }
+/* ── HERO ────────────────────────────────────────────────── */
+.hero{ position:relative; padding-top:clamp(40px,7vw,80px); padding-bottom:clamp(60px,9vw,120px); overflow:clip; }
+.hero__grid{
+  display:grid; grid-template-columns:1.15fr .85fr; gap:clamp(32px,5vw,72px);
+  align-items:center;
+}
+@media (max-width:920px){ .hero__grid{ grid-template-columns:1fr; } }
 
-  .weight-value {
-    font-family: var(--display);
-    font-size: 9rem;
-    line-height: 0.9;
-    color: var(--text);
-    letter-spacing: -0.02em;
-    transition: color 0.15s;
-    min-width: 3ch;
-    text-align: center;
-  }
-  .weight-value.active { color: var(--accent); }
+.hero__kicker{ margin-bottom:26px; }
+.hero h1{
+  font-family:var(--display); font-weight:900; text-transform:uppercase;
+  font-size:clamp(3rem,9vw,7rem); line-height:.86; letter-spacing:-.005em;
+  color:var(--paper);
+}
+.hero h1 .accent{ color:var(--volt); display:block; }
+.hero h1 .thin{ font-weight:500; color:var(--paper); }
+.hero__sub{
+  margin-top:30px; max-width:46ch; font-size:1.12rem; color:var(--mercury); font-weight:300;
+}
+.hero__sub strong{ color:var(--paper); font-weight:400; }
+.hero__cta{ display:flex; flex-wrap:wrap; gap:14px; margin-top:38px; align-items:center; }
+.hero__note{ font-family:var(--mono); font-size:.66rem; letter-spacing:.12em; color:var(--faint); text-transform:uppercase; margin-top:22px; }
 
-  .weight-unit {
-    font-family: var(--display);
-    font-size: 2.2rem;
-    color: var(--dim);
-    letter-spacing: 0.1em;
-    margin-top: 4px;
-  }
+/* hero instrument readout (the signature) */
+.readout{
+  position:relative; border:1px solid var(--steel); background:
+    linear-gradient(180deg, var(--graphite), #0d0d10);
+  padding:28px 28px 24px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.03), 0 40px 80px -40px rgba(0,0,0,.9);
+}
+.readout::before{
+  content:'GRV-100 · GRAVIMETRIC CONTROLLER';
+  position:absolute; top:-1px; left:-1px;
+  font-family:var(--mono); font-size:.56rem; letter-spacing:.24em; color:#0b0b05;
+  background:var(--volt); padding:4px 10px;
+}
+.readout__top{ display:flex; justify-content:space-between; align-items:center; margin-top:16px; margin-bottom:10px; }
+.dot{ width:7px; height:7px; border-radius:50%; background:var(--volt); box-shadow:0 0 12px var(--volt); animation:blip 1.8s ease-in-out infinite; }
+@keyframes blip{ 0%,100%{opacity:1} 50%{opacity:.25} }
+.live-tag{ display:inline-flex; align-items:center; gap:8px; font-family:var(--mono); font-size:.6rem; letter-spacing:.22em; color:var(--volt); text-transform:uppercase; }
 
-  /* ── MIDI Readout ─────────────────────────────────────── */
-  .midi-readout {
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    gap: 1px;
-    background: var(--border);
-    border: 1px solid var(--border);
-    margin-top: 24px;
-  }
+.readout__value{ display:flex; align-items:baseline; gap:10px; justify-content:center; padding:14px 0 6px; }
+.readout__num{
+  font-family:var(--display); font-weight:900; font-size:clamp(4.5rem,13vw,7.5rem);
+  line-height:.8; color:var(--volt); letter-spacing:-.02em; font-variant-numeric:tabular-nums;
+  text-shadow:0 0 50px rgba(200,241,53,.25);
+}
+.readout__unit{ font-family:var(--display); font-weight:700; font-size:1.8rem; color:var(--faint); }
 
-  .midi-cell {
-    background: var(--bg);
-    padding: 14px 18px;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
+.loadbar{ height:6px; background:#0a0a0c; border:1px solid var(--steel); margin:18px 0 20px; position:relative; overflow:hidden; }
+.loadbar__fill{ position:absolute; inset:0 auto 0 0; width:0%; background:var(--volt); box-shadow:0 0 18px var(--volt); transition:width .12s linear; }
+.loadbar__fill.hot{ background:var(--load); box-shadow:0 0 18px var(--load); }
 
-  .midi-cell-label {
-    font-family: var(--mono);
-    font-size: 0.6rem;
-    letter-spacing: 0.2em;
-    text-transform: uppercase;
-    color: var(--muted);
-  }
+.readout__cells{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:1px; background:var(--steel); border:1px solid var(--steel); }
+.cell{ background:var(--void); padding:12px 14px; }
+.cell .k{ font-family:var(--mono); font-size:.55rem; letter-spacing:.2em; text-transform:uppercase; color:var(--mercury); }
+.cell .v{ font-family:var(--mono); font-size:1.25rem; font-weight:500; color:var(--paper); margin-top:5px; font-variant-numeric:tabular-nums; }
+.cell .v.accent{ color:var(--volt); }
+.readout__hint{ font-family:var(--mono); font-size:.58rem; letter-spacing:.14em; color:var(--faint); text-transform:uppercase; margin-top:16px; text-align:center; }
 
-  .midi-cell-value {
-    font-family: var(--mono);
-    font-size: 1.6rem;
-    font-weight: 500;
-    color: var(--accent);
-    letter-spacing: -0.02em;
-    transition: all 0.08s;
-  }
+/* ── marquee strip ───────────────────────────────────────── */
+.strip{ border-block:1px solid var(--steel); background:var(--graphite); padding-block:20px; overflow:hidden; }
+.strip__row{ display:flex; gap:48px; white-space:nowrap; font-family:var(--mono); font-size:.76rem; letter-spacing:.2em; text-transform:uppercase; color:var(--mercury); animation:slide 28s linear infinite; width:max-content; }
+.strip__row span.volt{ color:var(--volt); }
+@keyframes slide{ from{transform:translateX(0)} to{transform:translateX(-50%)} }
+@media (prefers-reduced-motion:reduce){ .strip__row{ animation:none; } }
 
-  /* ── VU Bar ───────────────────────────────────────────── */
-  .vu-wrap {
-    margin-top: 20px;
-    position: relative;
-    height: 12px;
-    background: var(--bg);
-    border: 1px solid var(--border);
-    overflow: hidden;
-  }
-  .vu-fill {
-    position: absolute;
-    left: 0; top: 0; bottom: 0;
-    background: var(--accent);
-    width: 0%;
-    transition: width 0.12s ease-out;
-    box-shadow: 0 0 20px var(--accent);
-  }
-  .vu-fill.high { background: var(--accent2); box-shadow: 0 0 20px var(--accent2); }
+/* ── feature plate grid ──────────────────────────────────── */
+.plate-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:1px; background:var(--steel); border:1px solid var(--steel); }
+@media (max-width:860px){ .plate-grid{ grid-template-columns:1fr; } }
+.plate{ background:var(--graphite); padding:34px 30px; position:relative; transition:background .25s; }
+.plate:hover{ background:var(--graphite2); }
+.plate__idx{ font-family:var(--mono); font-size:.6rem; letter-spacing:.2em; color:var(--faint); }
+.plate__icon{ color:var(--volt); margin:14px 0 18px; }
+.plate h3{ font-family:var(--display); font-weight:700; font-size:1.5rem; letter-spacing:.02em; text-transform:uppercase; color:var(--paper); }
+.plate p{ margin-top:12px; color:var(--mercury); font-size:.95rem; }
 
-  /* ── Controls ─────────────────────────────────────────── */
-  .control-group { margin-bottom: 22px; }
+/* ── how it works ────────────────────────────────────────── */
+.steps{ display:grid; grid-template-columns:repeat(3,1fr); gap:clamp(20px,3vw,40px); }
+@media (max-width:860px){ .steps{ grid-template-columns:1fr; } }
+.step{ border-top:2px solid var(--volt); padding-top:22px; }
+.step .no{ font-family:var(--display); font-weight:900; font-size:2.4rem; line-height:1; color:var(--volt); }
+.step h3{ font-family:var(--mono); font-size:.82rem; letter-spacing:.16em; text-transform:uppercase; color:var(--paper); margin:14px 0 10px; }
+.step p{ color:var(--mercury); font-size:.95rem; }
 
-  label {
-    display: block;
-    font-family: var(--mono);
-    font-size: 0.62rem;
-    letter-spacing: 0.2em;
-    text-transform: uppercase;
-    color: var(--muted);
-    margin-bottom: 8px;
+/* ── parallax showcase ───────────────────────────────────── */
+.showcase{ position:relative; overflow:clip; border-block:1px solid var(--steel); }
+.showcase__bg{ position:absolute; inset:-18% 0; z-index:0;
+  background:radial-gradient(900px 500px at 70% 30%, rgba(200,241,53,.10), transparent 60%), var(--graphite); }
+@keyframes drift{ from{transform:translateY(-8%)} to{transform:translateY(8%)} }
+@supports (animation-timeline: view()){
+  @media (prefers-reduced-motion:no-preference){
+    .showcase__bg{ animation:drift linear both; animation-timeline:view(); animation-range:cover 0% cover 100%; }
   }
+}
+.showcase .wrap{ padding-block:clamp(60px,9vw,120px); }
+.showcase__inner{ display:grid; grid-template-columns:.9fr 1.1fr; gap:clamp(30px,5vw,64px); align-items:center; }
+@media (max-width:920px){ .showcase__inner{ grid-template-columns:1fr; } }
+.shot{ border:1px solid var(--steel); box-shadow:0 50px 90px -50px rgba(0,0,0,1); background:var(--void); }
+.showcase h2{ font-family:var(--display); font-weight:700; text-transform:uppercase; font-size:clamp(2rem,4.6vw,3.4rem); line-height:1; color:var(--paper); }
+.showcase p{ color:var(--mercury); margin-top:18px; max-width:46ch; }
+.showcase ul{ list-style:none; margin-top:24px; display:flex; flex-direction:column; gap:12px; }
+.showcase li{ font-family:var(--mono); font-size:.82rem; letter-spacing:.04em; color:var(--paper); display:flex; gap:12px; align-items:baseline; }
+.showcase li::before{ content:'→'; color:var(--volt); }
 
-  .row { display: flex; gap: 8px; align-items: center; }
+/* ── spec plate (hardware + specs) ───────────────────────── */
+.specplate{ border:1px solid var(--steel); background:var(--graphite); }
+.specrow{ display:grid; grid-template-columns:240px 1fr auto; gap:20px; align-items:center; padding:18px 26px; border-top:1px solid var(--steel); }
+.specrow:first-child{ border-top:none; }
+.specrow .key{ font-family:var(--mono); font-size:.72rem; letter-spacing:.14em; text-transform:uppercase; color:var(--mercury); }
+.specrow .val{ font-size:.98rem; color:var(--paper); }
+.specrow .badge{ font-family:var(--mono); font-size:.6rem; letter-spacing:.14em; text-transform:uppercase; color:var(--volt); border:1px solid var(--volt); padding:4px 9px; white-space:nowrap; }
+@media (max-width:720px){ .specrow{ grid-template-columns:1fr; gap:6px; } .specrow .badge{ justify-self:start; } }
 
-  input[type=number], input[type=text], select {
-    width: 100%;
-    background: var(--bg);
-    border: 1px solid var(--border);
-    color: var(--text);
-    font-family: var(--mono);
-    font-size: 0.85rem;
-    padding: 8px 12px;
-    outline: none;
-    transition: border-color 0.2s;
-    -webkit-appearance: none;
-    border-radius: 0;
-  }
-  input:focus, select:focus { border-color: var(--accent); }
+/* ── pricing ─────────────────────────────────────────────── */
+.price-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:1px; background:var(--steel); border:1px solid var(--steel); }
+@media (max-width:860px){ .price-grid{ grid-template-columns:1fr; } }
+.tier{ background:var(--graphite); padding:36px 30px; display:flex; flex-direction:column; }
+.tier.featured{ background:var(--graphite2); outline:1px solid var(--volt); outline-offset:-1px; position:relative; }
+.tier.featured::before{ content:'MOST POPULAR'; position:absolute; top:0; right:0; font-family:var(--mono); font-size:.55rem; letter-spacing:.2em; color:#0b0b05; background:var(--volt); padding:5px 12px; }
+.tier__name{ font-family:var(--mono); font-size:.72rem; letter-spacing:.22em; text-transform:uppercase; color:var(--mercury); }
+.tier__price{ font-family:var(--display); font-weight:900; font-size:3.4rem; line-height:1; color:var(--paper); margin:16px 0 4px; }
+.tier__price .cur{ font-size:1.4rem; vertical-align:super; color:var(--volt); font-weight:700; }
+.tier__price .per{ font-family:var(--mono); font-size:.66rem; letter-spacing:.14em; color:var(--mercury); text-transform:uppercase; -webkit-text-fill-color:initial; }
+.tier__desc{ color:var(--mercury); font-size:.9rem; min-height:42px; }
+.tier__list{ list-style:none; margin:22px 0 28px; display:flex; flex-direction:column; gap:12px; flex:1; }
+.tier__list li{ font-size:.9rem; color:var(--paper); display:flex; gap:11px; align-items:baseline; }
+.tier__list li::before{ content:'✓'; color:var(--volt); font-family:var(--mono); font-size:.8rem; }
+.tier__list li.off{ color:var(--faint); }
+.tier__list li.off::before{ content:'—'; color:var(--faint); }
 
-  input[type=range] {
-    -webkit-appearance: none;
-    width: 100%;
-    height: 2px;
-    background: var(--dim);
-    outline: none;
-    cursor: pointer;
-  }
-  input[type=range]::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    width: 14px; height: 14px;
-    border-radius: 50%;
-    background: var(--accent);
-    cursor: pointer;
-    box-shadow: 0 0 8px var(--accent);
-  }
-  .range-labels {
-    display: flex; justify-content: space-between;
-    font-family: var(--mono); font-size: 0.6rem; color: var(--dim);
-    margin-top: 4px;
-  }
+/* ── faq ─────────────────────────────────────────────────── */
+.faq{ border-top:1px solid var(--steel); }
+.faq details{ border-bottom:1px solid var(--steel); padding:22px 4px; }
+.faq summary{ cursor:pointer; list-style:none; display:flex; justify-content:space-between; gap:20px; align-items:center;
+  font-family:var(--display); font-weight:700; font-size:1.3rem; letter-spacing:.02em; text-transform:uppercase; color:var(--paper); }
+.faq summary::-webkit-details-marker{ display:none; }
+.faq summary::after{ content:'+'; font-family:var(--mono); color:var(--volt); font-size:1.4rem; transition:transform .2s; }
+.faq details[open] summary::after{ transform:rotate(45deg); }
+.faq p{ color:var(--mercury); margin-top:16px; max-width:70ch; font-size:.98rem; }
 
-  /* ── Buttons ──────────────────────────────────────────── */
-  .btn {
-    font-family: var(--mono);
-    font-size: 0.7rem;
-    letter-spacing: 0.15em;
-    text-transform: uppercase;
-    padding: 10px 18px;
-    border: 1px solid;
-    cursor: pointer;
-    transition: all 0.2s;
-    border-radius: 0;
-    background: transparent;
-  }
-  .btn-primary {
-    border-color: var(--accent);
-    color: var(--accent);
-  }
-  .btn-primary:hover {
-    background: var(--accent);
-    color: var(--bg);
-  }
-  .btn-danger {
-    border-color: var(--accent2);
-    color: var(--accent2);
-  }
-  .btn-danger:hover { background: var(--accent2); color: var(--bg); }
-  .btn-ghost { border-color: var(--dim); color: var(--muted); }
-  .btn-ghost:hover { border-color: var(--text); color: var(--text); }
-  .btn:disabled { opacity: 0.3; cursor: not-allowed; }
+/* ── final cta ───────────────────────────────────────────── */
+.finale{ text-align:center; border-top:1px solid var(--steel);
+  background:radial-gradient(800px 400px at 50% 0%, rgba(200,241,53,.08), transparent 65%); }
+.finale h2{ font-family:var(--display); font-weight:900; text-transform:uppercase;
+  font-size:clamp(2.6rem,8vw,6rem); line-height:.9; color:var(--paper); }
+.finale h2 .accent{ color:var(--volt); }
+.finale p{ color:var(--mercury); max-width:50ch; margin:22px auto 0; }
+.finale .hero__cta{ justify-content:center; }
 
-  .btn-full { width: 100%; margin-top: 6px; }
+/* ── footer ──────────────────────────────────────────────── */
+.site-footer{ border-top:1px solid var(--steel); padding-block:40px; }
+.site-footer .wrap{ display:flex; flex-wrap:wrap; gap:20px; justify-content:space-between; align-items:center; }
+.site-footer .meta{ font-family:var(--mono); font-size:.64rem; letter-spacing:.14em; text-transform:uppercase; color:var(--faint); }
+.site-footer a.meta:hover{ color:var(--mercury); }
 
-  /* ── CC Mapping cards ────────────────────────────────── */
-  .mapping-list { display: flex; flex-direction: column; gap: 8px; }
-
-  .mapping-card {
-    background: var(--bg);
-    border: 1px solid var(--border);
-    padding: 12px 14px;
-    display: grid;
-    grid-template-columns: 1fr auto;
-    align-items: center;
-    gap: 8px;
-    font-family: var(--mono);
-    font-size: 0.72rem;
-    transition: border-color 0.2s;
+/* ── reveal animations (progressive enhancement) ─────────── */
+.reveal{ opacity:1; transform:none; }
+@keyframes reveal-in{ from{opacity:0; transform:translateY(34px)} to{opacity:1; transform:none} }
+@supports (animation-timeline: view()){
+  @media (prefers-reduced-motion:no-preference){
+    .reveal{ opacity:0; animation:reveal-in linear both; animation-timeline:view(); animation-range:entry 2% entry 42%; }
   }
-  .mapping-card.active { border-color: var(--accent); }
-  .mapping-card .addr { color: var(--accent); }
-  .mapping-card .meta { color: var(--muted); font-size: 0.62rem; margin-top: 2px; }
-  .mapping-card .rm {
-    background: none; border: none; color: var(--dim);
-    cursor: pointer; font-size: 1rem; line-height: 1;
-    padding: 2px 6px;
-    transition: color 0.2s;
-  }
-  .mapping-card .rm:hover { color: var(--accent2); }
+}
 
-  /* ── Log ──────────────────────────────────────────────── */
-  .log {
-    height: 120px;
-    overflow-y: auto;
-    background: var(--bg);
-    border: 1px solid var(--border);
-    padding: 10px 12px;
-    font-family: var(--mono);
-    font-size: 0.65rem;
-    line-height: 1.6;
-    color: var(--muted);
-  }
-  .log::-webkit-scrollbar { width: 4px; }
-  .log::-webkit-scrollbar-track { background: transparent; }
-  .log::-webkit-scrollbar-thumb { background: var(--dim); }
-  .log-line { display: flex; gap: 8px; }
-  .log-line .ts { color: var(--dim); flex-shrink: 0; }
-  .log-line.ok .msg { color: var(--accent); }
-  .log-line.err .msg { color: var(--accent2); }
-  .log-line.midi .msg { color: #7eb8f7; }
-
-  /* ── Footer ───────────────────────────────────────────── */
-  footer {
-    border-top: 1px solid var(--border);
-    padding: 16px 0;
-    font-family: var(--mono);
-    font-size: 0.6rem;
-    color: var(--dim);
-    display: flex;
-    justify-content: space-between;
-    letter-spacing: 0.1em;
-  }
-
-  /* ── Responsive ───────────────────────────────────────── */
-  @media (max-width: 780px) {
-    main { grid-template-columns: 1fr; }
-    .weight-value { font-size: 6rem; }
-  }
-
-  /* ── Scale connect area ───────────────────────────────── */
-  .connect-area {
-    display: flex; gap: 8px; flex-direction: column;
-  }
-
-  .divider {
-    height: 1px; background: var(--border); margin: 18px 0;
-  }
-
-  select option { background: var(--surface); }
-
-  .tag {
-    display: inline-block;
-    font-family: var(--mono);
-    font-size: 0.58rem;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    padding: 2px 6px;
-    border: 1px solid var(--dim);
-    color: var(--dim);
-    margin-left: 4px;
-    vertical-align: middle;
-  }
-  .tag.live { border-color: var(--accent); color: var(--accent); }
+@media (prefers-reduced-motion:reduce){
+  html{ scroll-behavior:auto; }
+  *{ animation-duration:.001ms !important; animation-iteration-count:1 !important; }
+  .reveal{ opacity:1 !important; transform:none !important; }
+}
 </style>
 </head>
 <body>
-<div class="app">
 
-  <!-- ── Header ────────────────────────────────────────── -->
-  <header>
-    <div class="logo">GRAVITAS <span>Scale → MIDI</span></div>
-    <div class="status-bar">
-      <div class="pill" id="pill-hid">
-        <div class="dot"></div>
-        <span id="pill-hid-text">HID Disconnected</span>
-      </div>
-      <div class="pill" id="pill-midi">
-        <div class="dot"></div>
-        <span id="pill-midi-text">MIDI Disconnected</span>
+<div class="load-gauge" aria-hidden="true"></div>
+
+<!-- ── Header ─────────────────────────────────────────────── -->
+<header class="site-header">
+  <div class="wrap" style="display:flex;align-items:center;justify-content:space-between;gap:20px;padding-inline:0;">
+    <a class="brand" href="#top" aria-label="GRAVITAS home">
+      <svg viewBox="0 0 32 32" aria-hidden="true">
+        <rect width="32" height="32" rx="4" fill="#09090a"/>
+        <rect x="7" y="24" width="18" height="2" rx="1" fill="#c8f135"/>
+        <rect x="15" y="15" width="2" height="10" fill="#c8f135"/>
+        <rect x="9" y="13" width="14" height="2.5" rx="1.25" fill="#c8f135"/>
+        <path d="M9 13 Q6 13 6 16 Q6 18.5 10 18.5 Q14 18.5 14 16 Q14 13 11 13Z" fill="none" stroke="#c8f135" stroke-width="1.2"/>
+        <path d="M23 13 Q26 13 26 16 Q26 18.5 22 18.5 Q18 18.5 18 16 Q18 13 21 13Z" fill="none" stroke="#c8f135" stroke-width="1.2"/>
+      </svg>
+      <span class="name">GRAVITAS</span>
+    </a>
+    <nav class="nav">
+      <a href="#features" class="hide-sm">Features</a>
+      <a href="#how" class="hide-sm">How it works</a>
+      <a href="#specs" class="hide-sm">Specs</a>
+      <a href="#pricing">Pricing</a>
+      <span class="divider hide-sm" aria-hidden="true"></span>
+      <a class="btn btn-sm" href="app.html">Try the demo</a>
+    </nav>
+  </div>
+</header>
+
+<main id="top">
+
+  <!-- ── Hero ─────────────────────────────────────────────── -->
+  <section class="hero">
+    <div class="wrap">
+      <div class="hero__grid">
+        <div>
+          <div class="hero__kicker eyebrow">Weight‑to‑MIDI performance controller</div>
+          <h1>
+            <span class="thin">Play the</span>
+            <span class="accent">weight</span>
+            <span class="thin">of things.</span>
+          </h1>
+          <p class="hero__sub">
+            GRAVITAS turns any USB precision scale into a professional MIDI and OSC
+            controller. <strong>Pour, stack, press, lift</strong> — the physical world
+            becomes your modulation source, straight into Ableton Live and every DAW.
+          </p>
+          <div class="hero__cta">
+            <a class="btn btn-primary" href="#pricing">Get GRAVITAS <span class="arr">→</span></a>
+            <a class="btn" href="app.html">Try the live demo</a>
+          </div>
+          <p class="hero__note">No drivers · No code · Works in Chrome &amp; Edge · &lt;100 ms latency</p>
+        </div>
+
+        <!-- signature: scroll loads the scale -->
+        <div class="readout" aria-hidden="true">
+          <div class="readout__top">
+            <span class="live-tag"><span class="dot"></span>Live signal</span>
+            <span class="spec-label">U.S. Solid · 9600</span>
+          </div>
+          <div class="readout__value">
+            <span class="readout__num" id="r-weight">0</span>
+            <span class="readout__unit">g</span>
+          </div>
+          <div class="loadbar"><div class="loadbar__fill" id="r-fill"></div></div>
+          <div class="readout__cells">
+            <div class="cell"><div class="k">MIDI CC</div><div class="v accent" id="r-midi">0</div></div>
+            <div class="cell"><div class="k">Float</div><div class="v" id="r-float">0.000</div></div>
+            <div class="cell"><div class="k">Sent</div><div class="v" id="r-sent">0</div></div>
+          </div>
+          <div class="readout__hint">Scroll to load the scale ↓</div>
+        </div>
       </div>
     </div>
-  </header>
+  </section>
 
-  <!-- ── Main ──────────────────────────────────────────── -->
-  <main>
+  <!-- ── Marquee strip ────────────────────────────────────── -->
+  <div class="strip" aria-hidden="true">
+    <div class="strip__row">
+      <span>Ableton Live</span><span class="volt">⚖</span><span>WebHID</span><span class="volt">⚖</span>
+      <span>Web Serial</span><span class="volt">⚖</span><span>Web MIDI</span><span class="volt">⚖</span>
+      <span>AbletonOSC</span><span class="volt">⚖</span><span>DYMO S100</span><span class="volt">⚖</span>
+      <span>U.S. Solid</span><span class="volt">⚖</span>
+      <span>Ableton Live</span><span class="volt">⚖</span><span>WebHID</span><span class="volt">⚖</span>
+      <span>Web Serial</span><span class="volt">⚖</span><span>Web MIDI</span><span class="volt">⚖</span>
+      <span>AbletonOSC</span><span class="volt">⚖</span><span>DYMO S100</span><span class="volt">⚖</span>
+      <span>U.S. Solid</span><span class="volt">⚖</span>
+    </div>
+  </div>
 
-    <!-- Left: Visualisation -->
-    <div>
-      <div class="panel">
-        <div class="panel-title">Live Weight Reading</div>
-
-        <div class="weight-stage">
-          <div class="weight-label">Current Weight</div>
-          <div class="weight-value" id="weight-display">0</div>
-          <div class="weight-unit" id="unit-display">g</div>
+  <!-- ── Features ─────────────────────────────────────────── -->
+  <section class="section" id="features">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <span class="eyebrow">Capabilities</span>
+        <h2>One scale. Every parameter.</h2>
+        <p>Everything needed to turn mass into music, built on the modern web platform — nothing to install on your audio path.</p>
+      </div>
+      <div class="plate-grid">
+        <div class="plate reveal">
+          <div class="plate__idx">// 01</div>
+          <svg class="plate__icon" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 17h4l3-9 4 14 3-9h4"/></svg>
+          <h3>Weight‑driven CC</h3>
+          <p>Map live weight to any MIDI Control Change, on any channel, to as many destinations as you like — all at once.</p>
         </div>
-
-        <div class="midi-readout">
-          <div class="midi-cell">
-            <div class="midi-cell-label">MIDI Val</div>
-            <div class="midi-cell-value" id="midi-val">0</div>
-          </div>
-          <div class="midi-cell">
-            <div class="midi-cell-label">Float (0–1)</div>
-            <div class="midi-cell-value" id="midi-float">0.000</div>
-          </div>
-          <div class="midi-cell">
-            <div class="midi-cell-label">MIDI Sent</div>
-            <div class="midi-cell-value" id="osc-count">0</div>
-          </div>
+        <div class="plate reveal">
+          <div class="plate__idx">// 02</div>
+          <svg class="plate__icon" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="7" width="18" height="10" rx="2"/><path d="M7 7V5M12 7V5M17 7V5M7 17v2M12 17v2M17 17v2"/></svg>
+          <h3>Universal scales</h3>
+          <p>USB HID postal scales and serial lab balances work out of the box, plus a generic mode for virtually any scale sold today.</p>
         </div>
-
-        <div class="vu-wrap" style="margin-top:16px;">
-          <div class="vu-fill" id="vu-fill"></div>
+        <div class="plate reveal">
+          <div class="plate__idx">// 03</div>
+          <svg class="plate__icon" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 3v18M5 8l7-5 7 5M5 16l7 5 7-5"/></svg>
+          <h3>Direct to your DAW</h3>
+          <p>Sends standard MIDI over the OS bus (IAC Driver / loopMIDI) — instantly mappable with Ableton MIDI Learn and any DAW.</p>
         </div>
-
-        <div style="margin-top:24px;">
-          <div class="panel-title" style="margin-bottom:12px;">MIDI Log</div>
-          <div class="log" id="log"></div>
+        <div class="plate reveal">
+          <div class="plate__idx">// 04</div>
+          <svg class="plate__icon" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="9"/><path d="M12 3a15 15 0 0 0 0 18M12 3a15 15 0 0 1 0 18M3 12h18"/></svg>
+          <h3>OSC bridge included</h3>
+          <p>An optional Node bridge forwards control straight to AbletonOSC addresses over UDP for deep, parameter‑addressed control.</p>
+        </div>
+        <div class="plate reveal">
+          <div class="plate__idx">// 05</div>
+          <svg class="plate__icon" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 12h4l2-7 4 18 3-14 2 5h3"/></svg>
+          <h3>Precision shaping</h3>
+          <p>Per‑session smoothing, adjustable poll rate, and a calibrated weight‑to‑range map keep output musical and jitter‑free.</p>
+        </div>
+        <div class="plate reveal">
+          <div class="plate__idx">// 06</div>
+          <svg class="plate__icon" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="6" y="3" width="12" height="18" rx="2"/><path d="M11 18h2"/></svg>
+          <h3>Installable app</h3>
+          <p>Add GRAVITAS to your dock or home screen as a standalone PWA — fully offline‑capable after first load, zero cloud account.</p>
         </div>
       </div>
     </div>
+  </section>
 
-    <!-- Right: Controls -->
-    <div style="display:flex;flex-direction:column;gap:16px;">
-
-      <!-- Scale Connection -->
-      <div class="panel">
-        <div class="panel-title">Scale Connection <span class="tag" id="hid-tag">Disconnected</span></div>
-
-        <div class="connect-area">
-          <div class="control-group" style="margin-bottom:8px;">
-            <label>Scale Type</label>
-            <select id="scale-type-select">
-              <option value="dymo">DYMO S100 Postal Scale (USB HID)</option>
-              <option value="ussolid">U.S. Solid Precision Balance (Serial)</option>
-              <option value="generic-hid">Generic USB Scale (HID)</option>
-              <option value="generic-serial">Generic USB Scale (Serial)</option>
-            </select>
-          </div>
-          <!-- Serial-only: baud rate -->
-          <div class="control-group" id="serial-options" style="display:none;margin-bottom:8px;">
-            <label>Baud Rate</label>
-            <select id="baud-rate-select">
-              <option value="1200">1200</option>
-              <option value="2400">2400</option>
-              <option value="4800">4800</option>
-              <option value="9600" selected>9600</option>
-              <option value="19200">19200</option>
-              <option value="38400">38400</option>
-              <option value="57600">57600</option>
-              <option value="115200">115200</option>
-            </select>
-          </div>
-          <button class="btn btn-primary btn-full" id="btn-connect-scale">
-            Connect Scale
-          </button>
-          <button class="btn btn-danger btn-full" id="btn-disconnect-scale" disabled>
-            Disconnect Scale
-          </button>
+  <!-- ── How it works ─────────────────────────────────────── -->
+  <section class="section" id="how">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <span class="eyebrow">Signal path</span>
+        <h2>From mass to music<br/>in three moves.</h2>
+      </div>
+      <div class="steps">
+        <div class="step reveal">
+          <div class="no">1</div>
+          <h3>Connect the scale</h3>
+          <p>Plug in over USB, pick your model, and hit connect. The browser talks to the scale directly — no driver to install.</p>
         </div>
-
-        <div class="divider"></div>
-
-        <div class="control-group">
-          <label>Unit</label>
-          <select id="unit-select">
-            <option value="g">Grams (g)</option>
-            <option value="oz">Ounces (oz)</option>
-            <option value="lb">Pounds (lb)</option>
-          </select>
+        <div class="step reveal">
+          <div class="no">2</div>
+          <h3>Shape the signal</h3>
+          <p>Set the weight range, smoothing, and poll rate. GRAVITAS maps your range onto a clean MIDI 0–127 or 0–1 float.</p>
         </div>
-
-        <div class="control-group">
-          <label>Weight Range → MIDI 0–127</label>
-          <div class="row">
-            <div style="flex:1">
-              <input type="number" id="range-min" value="0" min="0" placeholder="Min g"/>
-            </div>
-            <span style="color:var(--dim);font-family:var(--mono);font-size:0.8rem;flex-shrink:0;padding:0 4px">→</span>
-            <div style="flex:1">
-              <input type="number" id="range-max" value="500" min="1" placeholder="Max g"/>
-            </div>
-          </div>
-          <div class="range-labels"><span>MIDI 0</span><span>MIDI 127</span></div>
-        </div>
-
-        <div class="control-group">
-          <label>Smoothing <span id="smooth-val" style="color:var(--text)">3</span></label>
-          <input type="range" id="smooth" min="1" max="20" value="3"/>
-          <div class="range-labels"><span>Raw</span><span>Heavy</span></div>
-        </div>
-
-        <div class="control-group">
-          <label>Poll Rate (ms) <span id="poll-val" style="color:var(--text)">80</span></label>
-          <input type="range" id="poll-rate" min="20" max="500" value="80" step="10"/>
-          <div class="range-labels"><span>20ms</span><span>500ms</span></div>
+        <div class="step reveal">
+          <div class="no">3</div>
+          <h3>Perform</h3>
+          <p>Route to your DAW over the MIDI bus or OSC, MIDI‑Learn any parameter, and play the weight of whatever you put on the pan.</p>
         </div>
       </div>
-
-      <!-- MIDI Output -->
-      <div class="panel">
-        <div class="panel-title">MIDI Output <span class="tag" id="midi-tag">Web MIDI</span></div>
-
-        <button class="btn btn-primary btn-full" id="btn-connect-midi">
-          Request MIDI Access
-        </button>
-
-        <div class="control-group" style="margin-top:14px;">
-          <label>Output Device</label>
-          <div class="row">
-            <select id="midi-output-select" style="flex:1;width:auto">
-              <option value="">— connect MIDI first —</option>
-            </select>
-            <button class="btn btn-ghost" id="btn-select-midi" style="flex-shrink:0">Select</button>
-          </div>
-          <div style="font-family:var(--mono);font-size:0.6rem;color:var(--muted);margin-top:6px;">
-            Mac IAC Driver appears here after enabling in Audio MIDI Setup
-          </div>
-        </div>
-
-        <div class="divider"></div>
-
-        <div class="panel-title" style="margin-bottom:12px;">CC Mappings</div>
-        <div class="mapping-list" id="mapping-list"></div>
-
-        <!-- Add mapping -->
-        <div style="margin-top:12px;">
-          <div class="row" style="gap:8px;align-items:flex-end;">
-            <div style="flex:1;">
-              <label>Channel</label>
-              <input type="number" id="new-channel" value="1" min="1" max="16"/>
-            </div>
-            <div style="flex:2;">
-              <label>CC Number</label>
-              <input type="number" id="new-cc" value="1" min="0" max="127"/>
-            </div>
-            <button class="btn btn-ghost" id="btn-add-mapping" style="flex-shrink:0;">+ Add</button>
-          </div>
-        </div>
-      </div>
-
     </div>
-  </main>
+  </section>
 
-  <footer>
-    <span>GRAVITAS v2.1 — WebHID + Web Serial + Web MIDI</span>
-    <span>Requires Chrome/Edge + IAC DRIVER · built by Max Fishman</span>
-  </footer>
-</div>
+  <!-- ── Parallax showcase ────────────────────────────────── -->
+  <section class="showcase">
+    <div class="showcase__bg" aria-hidden="true"></div>
+    <div class="wrap">
+      <div class="showcase__inner">
+        <div class="reveal">
+          <span class="eyebrow">The instrument</span>
+          <h2 style="margin-top:16px;">A control surface<br/>built for weight.</h2>
+          <p>A single, focused interface — an oversized live weight stage, MIDI telemetry, a responsive VU meter, and a timestamped event log. No modes to learn.</p>
+          <ul>
+            <li>Live weight + resolved MIDI value at a glance</li>
+            <li>Unlimited channel &amp; CC mappings</li>
+            <li>Smoothing and poll‑rate dialed in per session</li>
+            <li>High‑contrast, stage‑ready readability</li>
+          </ul>
+          <div class="hero__cta" style="margin-top:30px;">
+            <a class="btn btn-primary" href="app.html">Open the live demo <span class="arr">→</span></a>
+          </div>
+        </div>
+        <div class="reveal">
+          <img class="shot" src="docs/screenshots/interface-live.png" alt="The GRAVITAS control surface showing a live 342.6 gram reading driving MIDI CC output"/>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Hardware / Specs ─────────────────────────────────── -->
+  <section class="section" id="specs">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <span class="eyebrow">Compatibility plate</span>
+        <h2>Certified &amp; generic hardware.</h2>
+        <p>GRAVITAS speaks two industry‑standard scale languages, covering the overwhelming majority of USB scales on the market.</p>
+      </div>
+      <div class="specplate reveal">
+        <div class="specrow"><div class="key">DYMO S100</div><div class="val">USB postal scale · WebHID · HID weighing report</div><div class="badge">Certified</div></div>
+        <div class="specrow"><div class="key">U.S. Solid Balance</div><div class="val">Precision lab scale · Web Serial · CH340 / CP2102 / FTDI</div><div class="badge">Certified</div></div>
+        <div class="specrow"><div class="key">Any HID scale</div><div class="val">Standard USB HID scale report · auto‑detected</div><div class="badge">Generic</div></div>
+        <div class="specrow"><div class="key">Any serial scale</div><div class="val">ASCII weight lines over virtual COM · tolerant parser</div><div class="badge">Generic</div></div>
+      </div>
+
+      <div class="section-head reveal" style="margin-top:72px;margin-bottom:28px;">
+        <span class="eyebrow">Technical</span>
+        <h2>At a glance.</h2>
+      </div>
+      <div class="specplate reveal">
+        <div class="specrow"><div class="key">Operating system</div><div class="val">macOS · Windows · Linux</div><div class="badge">Any</div></div>
+        <div class="specrow"><div class="key">Browser engine</div><div class="val">Chrome or Edge (Chromium) — WebHID + Web Serial + Web MIDI</div><div class="badge">Required</div></div>
+        <div class="specrow"><div class="key">DAW</div><div class="val">Ableton Live, or any DAW that accepts MIDI CC</div><div class="badge">Any</div></div>
+        <div class="specrow"><div class="key">Latency</div><div class="val">Under 100 ms end to end, with adjustable poll rate 20–500 ms</div><div class="badge">Realtime</div></div>
+        <div class="specrow"><div class="key">OSC bridge</div><div class="val">Node.js v18+ · WebSocket → UDP to AbletonOSC (:9000)</div><div class="badge">Optional</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Pricing ──────────────────────────────────────────── -->
+  <section class="section" id="pricing">
+    <div class="wrap">
+      <div class="section-head reveal" style="max-width:760px;">
+        <span class="eyebrow">Licensing</span>
+        <h2>Own it once.</h2>
+        <p>A one‑time license — no subscription, no cloud account, no per‑seat lock‑in. Every GRAVITAS license includes lifetime updates.</p>
+      </div>
+      <div class="price-grid">
+        <!-- TODO: wire buy buttons to a real Stripe / Gumroad / Lemon Squeezy checkout -->
+        <div class="tier reveal">
+          <div class="tier__name">Try</div>
+          <div class="tier__price"><span class="cur">$</span>0</div>
+          <div class="tier__desc">The full live tool in your browser, for personal practice.</div>
+          <ul class="tier__list">
+            <li>Full weight‑to‑MIDI engine</li>
+            <li>All supported scales</li>
+            <li>Unlimited CC mappings</li>
+            <li class="off">OSC bridge</li>
+            <li class="off">Priority support</li>
+          </ul>
+          <a class="btn" href="app.html">Launch the demo</a>
+        </div>
+
+        <div class="tier featured reveal">
+          <div class="tier__name">Studio</div>
+          <div class="tier__price"><span class="cur">$</span>49 <span class="per">/ one‑time</span></div>
+          <div class="tier__desc">For producers and performers who want the whole instrument.</div>
+          <ul class="tier__list">
+            <li>Everything in Try</li>
+            <li>OSC bridge for AbletonOSC</li>
+            <li>Installable offline PWA</li>
+            <li>Lifetime updates</li>
+            <li>Email support</li>
+          </ul>
+          <a class="btn btn-primary" href="#" data-checkout="studio">Buy Studio <span class="arr">→</span></a>
+        </div>
+
+        <div class="tier reveal">
+          <div class="tier__name">Stage</div>
+          <div class="tier__price"><span class="cur">$</span>129 <span class="per">/ one‑time</span></div>
+          <div class="tier__desc">For installations and live rigs running multiple scales.</div>
+          <ul class="tier__list">
+            <li>Everything in Studio</li>
+            <li>Multi‑instance / multi‑scale use</li>
+            <li>Commercial &amp; installation license</li>
+            <li>Priority support</li>
+            <li>Setup consultation</li>
+          </ul>
+          <a class="btn" href="#" data-checkout="stage">Buy Stage <span class="arr">→</span></a>
+        </div>
+      </div>
+      <p class="hero__note" style="margin-top:24px;">Prices in USD. Need an invoice, education, or site license? Just ask.</p>
+    </div>
+  </section>
+
+  <!-- ── FAQ ──────────────────────────────────────────────── -->
+  <section class="section" id="faq">
+    <div class="wrap" style="max-width:860px;">
+      <div class="section-head reveal">
+        <span class="eyebrow">Questions</span>
+        <h2>Good to know.</h2>
+      </div>
+      <div class="faq reveal">
+        <details>
+          <summary>Which scales actually work?</summary>
+          <p>The DYMO S100 and the U.S. Solid Precision Balance are certified out of the box. Beyond those, generic HID and serial profiles auto‑extract the weight from most USB scales — if it reports over USB HID or prints ASCII over a serial port, it almost certainly works.</p>
+        </details>
+        <details>
+          <summary>Do I need to install drivers or write any code?</summary>
+          <p>No. GRAVITAS runs entirely in Chrome or Edge using the browser's hardware APIs. The only optional component is the OSC bridge, which is a single Node command if you want parameter‑addressed OSC control.</p>
+        </details>
+        <details>
+          <summary>Does it work with my DAW, not just Ableton?</summary>
+          <p>Yes. GRAVITAS sends standard MIDI Control Change over your OS MIDI bus, so any DAW with MIDI Learn — Logic, Live, Bitwig, FL Studio, Reaper — can map it. Ableton users get the extra option of deep OSC control via AbletonOSC.</p>
+        </details>
+        <details>
+          <summary>Why Chrome or Edge only?</summary>
+          <p>WebHID, Web Serial, and Web MIDI are only exposed by Chromium‑based browsers today. Firefox and Safari don't yet provide the hardware access GRAVITAS needs to talk to your scale.</p>
+        </details>
+        <details>
+          <summary>Where does my data go?</summary>
+          <p>Nowhere. Everything runs locally on your machine — scale to browser to MIDI bus. There's no account, no telemetry, and no cloud dependency.</p>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Final CTA ────────────────────────────────────────── -->
+  <section class="section finale">
+    <div class="wrap">
+      <h2>Put something<br/>on the <span class="accent">scale.</span></h2>
+      <p>A new instrument for anyone with a scale and a reason to play it.</p>
+      <div class="hero__cta">
+        <a class="btn btn-primary" href="#pricing">Get GRAVITAS <span class="arr">→</span></a>
+        <a class="btn" href="app.html">Try the live demo</a>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- ── Footer ─────────────────────────────────────────────── -->
+<footer class="site-footer">
+  <div class="wrap">
+    <span class="meta">GRAVITAS v2.1 — WebHID · Web Serial · Web MIDI · OSC</span>
+    <a class="meta" href="app.html">Launch app →</a>
+    <span class="meta">Built by Max Fishman</span>
+  </div>
+</footer>
 
 <script>
-// ═══════════════════════════════════════════════════════════
-//  SERVICE WORKER REGISTRATION
-// ═══════════════════════════════════════════════════════════
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('./sw.js').catch(() => {});
-}
+/* ──────────────────────────────────────────────────────────
+   Signature interaction: "scroll loads the scale."
+   The hero readout tracks scroll progress through the first
+   viewport, mapping it to weight → MIDI, just like the app.
+   Enhancement only — the readout is aria-hidden and the page
+   is fully usable without it. Respects reduced motion.
+   ────────────────────────────────────────────────────────── */
+(function(){
+  var W = document.getElementById('r-weight');
+  var F = document.getElementById('r-fill');
+  var M = document.getElementById('r-midi');
+  var FL = document.getElementById('r-float');
+  var S = document.getElementById('r-sent');
+  if (!W) return;
 
-// ═══════════════════════════════════════════════════════════
-//  STATE
-// ═══════════════════════════════════════════════════════════
-const state = {
-  // Scale connection (HID or Serial — only one active at a time)
-  hidDevice: null,
-  serialPort: null,
-  serialReader: null,
-  serialReadable: null,
-  connectionType: null,   // 'hid' | 'serial' | null
+  var MAX_G = 500;              // matches the app's default range
+  var FLOOR = 0.18;            // resting load so the readout never reads empty
+  var sent = 14208;            // believable running counter
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-  midiAccess: null,
-  midiOutput: null,
-  weightRaw: 0,
-  weightSmoothed: 0,
-  weightHistory: [],
-  midiValue: 0,
-  floatValue: 0,
-  midiSentCount: 0,
-  pollTimer: null,
-  mappings: [
-    { id: 1, channel: 1, cc: 1,  label: 'Ch 1  CC 1'  },
-    { id: 2, channel: 1, cc: 7,  label: 'Ch 1  CC 7'  },
-  ],
-  nextMappingId: 3,
-};
-
-// ═══════════════════════════════════════════════════════════
-//  DOM REFS
-// ═══════════════════════════════════════════════════════════
-const $ = id => document.getElementById(id);
-const weightDisplay = $('weight-display');
-const unitDisplay   = $('unit-display');
-const midiVal       = $('midi-val');
-const midiFloat     = $('midi-float');
-const midiCount     = $('osc-count');
-const vuFill        = $('vu-fill');
-const logEl         = $('log');
-const mappingList   = $('mapping-list');
-
-// ═══════════════════════════════════════════════════════════
-//  LOGGING
-// ═══════════════════════════════════════════════════════════
-function log(msg, type = '') {
-  const now = new Date();
-  const ts = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
-  const line = document.createElement('div');
-  line.className = `log-line ${type}`;
-  line.innerHTML = `<span class="ts">${ts}</span><span class="msg">${msg}</span>`;
-  logEl.appendChild(line);
-  logEl.scrollTop = logEl.scrollHeight;
-  while (logEl.children.length > 200) logEl.removeChild(logEl.firstChild);
-}
-
-// ═══════════════════════════════════════════════════════════
-//  SCALE PROFILES
-//  HID scales use WebHID; serial scales use Web Serial API.
-// ═══════════════════════════════════════════════════════════
-const SCALE_PROFILES = {
-  dymo: {
-    name: 'DYMO S100',
-    type: 'hid',
-    vendorId: 0x0922,
-    productId: 0x8003,
-  },
-  ussolid: {
-    name: 'U.S. Solid Precision Balance',
-    type: 'serial',
-    defaultBaud: 9600,
-  },
-  'generic-hid': {
-    name: 'Generic USB Scale (HID)',
-    type: 'hid',
-    vendorId: null,
-    productId: null,
-  },
-  'generic-serial': {
-    name: 'Generic USB Scale (Serial)',
-    type: 'serial',
-    defaultBaud: 9600,
-  },
-};
-
-// USB HID Usage Page for Weighing Devices (0x8D)
-const HID_USAGE_PAGE_SCALE = 0x008D;
-
-// Show/hide serial options when scale type changes
-$('scale-type-select').addEventListener('change', () => {
-  const profile = SCALE_PROFILES[$('scale-type-select').value];
-  $('serial-options').style.display = profile.type === 'serial' ? '' : 'none';
-  if (profile.defaultBaud) $('baud-rate-select').value = profile.defaultBaud;
-});
-
-$('btn-connect-scale').addEventListener('click', connectScale);
-$('btn-disconnect-scale').addEventListener('click', disconnectScale);
-
-// ── Unified connect ──────────────────────────────────────
-async function connectScale() {
-  const scaleType = $('scale-type-select').value;
-  const profile = SCALE_PROFILES[scaleType];
-
-  if (profile.type === 'hid') {
-    await connectHID(profile);
-  } else {
-    await connectSerial(profile);
+  function paint(progress){
+    progress = Math.max(0, Math.min(1, progress));
+    var g = progress * MAX_G;
+    var midi = Math.round(progress * 127);
+    W.textContent = g < 1 ? '0' : g.toFixed(1);
+    M.textContent = midi;
+    FL.textContent = progress.toFixed(3);
+    F.style.width = (progress * 100) + '%';
+    F.classList.toggle('hot', progress > 0.85);
   }
-}
 
-// ── Unified disconnect ───────────────────────────────────
-async function disconnectScale() {
-  stopPolling();
-  if (state.connectionType === 'hid') {
-    await disconnectHID();
-  } else if (state.connectionType === 'serial') {
-    await disconnectSerial();
+  // Raw scroll position through the first viewport (0 at top → 1 after ~90vh).
+  function scrollRaw(){
+    var span = window.innerHeight * 0.9;
+    return span > 0 ? Math.max(0, Math.min(1, window.scrollY / span)) : 0;
   }
-  state.connectionType = null;
-  setPillStatus('hid', false, 'Disconnected');
-  $('btn-connect-scale').disabled = false;
-  $('btn-disconnect-scale').disabled = true;
-  $('scale-type-select').disabled = false;
-  $('hid-tag').textContent = 'Disconnected';
-  $('hid-tag').classList.remove('live');
-  log('Scale disconnected');
-  updateDisplay(0, 'g');
-}
+  // Displayed load: rests at FLOOR, climbs to full as you scroll.
+  function currentP(){ return Math.min(1, FLOOR + (1 - FLOOR) * scrollRaw()); }
 
-function onScaleConnected(label) {
-  setPillStatus('hid', true, label);
-  $('btn-connect-scale').disabled = true;
-  $('btn-disconnect-scale').disabled = false;
-  $('scale-type-select').disabled = true;
-  $('hid-tag').textContent = 'LIVE';
-  $('hid-tag').classList.add('live');
-  startPolling();
-}
-
-// ═══════════════════════════════════════════════════════════
-//  WebHID CONNECTION (DYMO, generic HID scales)
-// ═══════════════════════════════════════════════════════════
-async function connectHID(profile) {
-  if (!navigator.hid) {
-    log('WebHID not supported — use Chrome/Edge', 'err');
-    return;
-  }
-  try {
-    const filters = [];
-    if (profile.vendorId) {
-      const f = { vendorId: profile.vendorId };
-      if (profile.productId) f.productId = profile.productId;
-      filters.push(f);
-    }
-    const requestOpts = filters.length
-      ? { filters }
-      : { filters: [{ usagePage: HID_USAGE_PAGE_SCALE }] };
-
-    const devices = await navigator.hid.requestDevice(requestOpts);
-    if (!devices.length) { log('No scale selected', 'err'); return; }
-    const device = devices[0];
-    await device.open();
-    state.hidDevice = device;
-    state.connectionType = 'hid';
-
-    device.addEventListener('inputreport', onHIDReport);
-    const label = device.productName || profile.name;
-    log(`Connected (HID): ${label} (${device.vendorId.toString(16)}:${device.productId.toString(16)})`, 'ok');
-    onScaleConnected(label);
-  } catch (e) {
-    log(`HID error: ${e.message}`, 'err');
-  }
-}
-
-async function disconnectHID() {
-  if (state.hidDevice) {
-    state.hidDevice.removeEventListener('inputreport', onHIDReport);
-    await state.hidDevice.close().catch(() => {});
-    state.hidDevice = null;
-  }
-}
-
-function onHIDReport(event) {
-  // Standard USB HID scale report format (6 bytes):
-  // [0] report id, [1] status flags, [2] unit code,
-  // [3] scaling (negative = decimal places), [4] weightLo, [5] weightHi
-  const data = event.data;
-  if (data.byteLength < 6) return;
-
-  const scaling   = data.getInt8(3);
-  const weightRaw = data.getUint8(4) + (data.getUint8(5) << 8);
-
-  state.weightRaw = scaling < 0
-    ? weightRaw / Math.pow(10, -scaling)
-    : weightRaw * Math.pow(10, scaling);
-}
-
-// ═══════════════════════════════════════════════════════════
-//  WEB SERIAL CONNECTION (U.S. Solid, generic serial scales)
-//
-//  U.S. Solid Precision Balance transmits ASCII lines over
-//  a virtual COM port (CH340 / CP2102 / FTDI chip).
-//  Typical line formats:
-//    "ST,GS,+  123.45,g\r\n"   (stable, gross, positive)
-//    "US,GS,+  123.45,g\r\n"   (unstable)
-//    "+  123.45 g\r\n"          (simple format)
-//    "   0.00 g\r\n"
-//
-//  The parser below extracts the first decimal number found
-//  in each line, making it tolerant of format variations.
-// ═══════════════════════════════════════════════════════════
-async function connectSerial(profile) {
-  if (!navigator.serial) {
-    log('Web Serial API not supported — use Chrome/Edge', 'err');
-    return;
-  }
-  try {
-    const port = await navigator.serial.requestPort();
-    const baudRate = parseInt($('baud-rate-select').value) || profile.defaultBaud || 9600;
-    await port.open({ baudRate });
-
-    state.serialPort = port;
-    state.connectionType = 'serial';
-
-    log(`Connected (Serial): ${profile.name} @ ${baudRate} baud`, 'ok');
-    onScaleConnected(profile.name);
-
-    // Start background serial reader
-    readSerialLoop(port);
-  } catch (e) {
-    log(`Serial error: ${e.message}`, 'err');
-  }
-}
-
-async function readSerialLoop(port) {
-  const decoder = new TextDecoderStream();
-  state.serialReadable = port.readable.pipeThrough(decoder);
-  state.serialReader = state.serialReadable.getReader();
-  let lineBuf = '';
-
-  try {
-    while (true) {
-      const { value, done } = await state.serialReader.read();
-      if (done) break;
-      lineBuf += value;
-      // Split on newlines
-      const lines = lineBuf.split(/\r?\n/);
-      lineBuf = lines.pop(); // keep incomplete tail
-      for (const line of lines) {
-        if (line.trim()) parseSerialLine(line);
-      }
-    }
-  } catch (e) {
-    // Reader cancelled during disconnect — expected
-    if (state.connectionType === 'serial') {
-      log(`Serial connection interrupted: ${e.message} — try reconnecting`, 'err');
-    }
-  }
-}
-
-function parseSerialLine(line) {
-  // Extract numeric weight from common serial scale formats.
-  // Handles:
-  //   "ST,GS,+  123.45,g"   → 123.45
-  //   "US,GS,-  0.02,g"     → -0.02
-  //   "+  123.45 g"          → 123.45
-  //   "  0.00 g"             → 0
-  //   "123.45"               → 123.45
-  const m = line.match(/([+-]?\d+\.?\d*)/);
-  if (m) {
-    const val = parseFloat(m[1]);
-    if (!isNaN(val)) {
-      state.weightRaw = val;
-    }
-  }
-}
-
-async function disconnectSerial() {
-  if (state.serialReader) {
-    await state.serialReader.cancel().catch(() => {});
-    state.serialReader = null;
-  }
-  if (state.serialPort) {
-    await state.serialPort.close().catch(() => {});
-    state.serialPort = null;
-  }
-  state.serialReadable = null;
-}
-
-// ═══════════════════════════════════════════════════════════
-//  POLLING & SMOOTHING
-// ═══════════════════════════════════════════════════════════
-function startPolling() {
-  stopPolling();
-  const ms = parseInt($('poll-rate').value);
-  state.pollTimer = setInterval(processWeight, ms);
-}
-
-function stopPolling() {
-  if (state.pollTimer) { clearInterval(state.pollTimer); state.pollTimer = null; }
-}
-
-function processWeight() {
-  const smoothN = parseInt($('smooth').value);
-  const unit = $('unit-select').value;
-
-  // Convert to grams for internal range math
-  let weightG = state.weightRaw;
-  if (unit === 'oz') weightG = state.weightRaw * 28.3495;
-  if (unit === 'lb') weightG = state.weightRaw * 453.592;
-
-  // Smooth
-  state.weightHistory.push(weightG);
-  if (state.weightHistory.length > smoothN) state.weightHistory.shift();
-  const avg = state.weightHistory.reduce((a,b)=>a+b,0) / state.weightHistory.length;
-  state.weightSmoothed = avg;
-
-  const minG = parseFloat($('range-min').value) || 0;
-  const maxG = parseFloat($('range-max').value) || 500;
-
-  const clamped = Math.max(minG, Math.min(maxG, avg));
-  const norm = maxG > minG ? (clamped - minG) / (maxG - minG) : 0;
-  const midi = Math.round(norm * 127);
-
-  state.floatValue = norm;
-  state.midiValue  = midi;
-
-  updateDisplay(state.weightRaw, unit, norm, midi);
-  sendMIDI(midi);
-}
-
-function updateDisplay(weight, unit, norm=0, midi=0) {
-  const isActive = weight > 0;
-  weightDisplay.textContent = weight % 1 === 0 ? weight : weight.toFixed(1);
-  weightDisplay.classList.toggle('active', isActive);
-  unitDisplay.textContent = unit;
-  midiVal.textContent = midi;
-  midiFloat.textContent = norm.toFixed(3);
-
-  const pct = norm * 100;
-  vuFill.style.width = pct + '%';
-  vuFill.classList.toggle('high', pct > 85);
-}
-
-// ═══════════════════════════════════════════════════════════
-//  WEB MIDI
-// ═══════════════════════════════════════════════════════════
-$('btn-connect-midi').addEventListener('click', connectMIDI);
-$('btn-select-midi').addEventListener('click', selectMIDIOutput);
-
-async function connectMIDI() {
-  if (!navigator.requestMIDIAccess) {
-    log('Web MIDI API not supported — use Chrome/Edge', 'err');
-    return;
-  }
-  try {
-    state.midiAccess = await navigator.requestMIDIAccess({ sysex: false });
-    refreshMIDIOutputs();
-    state.midiAccess.onstatechange = refreshMIDIOutputs;
-    $('btn-connect-midi').textContent = 'Refresh Devices';
-    log('MIDI access granted — select an output device', 'ok');
-  } catch(e) {
-    log(`MIDI error: ${e.message}`, 'err');
-  }
-}
-
-function refreshMIDIOutputs() {
-  const sel = $('midi-output-select');
-  const prev = sel.value;
-  sel.innerHTML = '<option value="">— select output —</option>';
-  for (const [id, output] of state.midiAccess.outputs) {
-    const opt = document.createElement('option');
-    opt.value = id;
-    opt.textContent = output.name;
-    if (id === prev) opt.selected = true;
-    sel.appendChild(opt);
-  }
-  // Re-validate current output
-  if (state.midiOutput) {
-    const stillExists = state.midiAccess.outputs.has(state.midiOutput.id);
-    if (!stillExists) {
-      state.midiOutput = null;
-      setPillStatus('midi', false, 'MIDI Disconnected');
-      $('midi-tag').textContent = 'Web MIDI';
-      $('midi-tag').classList.remove('live');
-    }
-  }
-}
-
-function selectMIDIOutput() {
-  if (!state.midiAccess) {
-    log('Request MIDI access first', 'err');
-    return;
-  }
-  const id = $('midi-output-select').value;
-  if (!id) {
-    log('Select an output device from the list', 'err');
-    return;
-  }
-  state.midiOutput = state.midiAccess.outputs.get(id) || null;
-  if (state.midiOutput) {
-    setPillStatus('midi', true, state.midiOutput.name);
-    $('midi-tag').textContent = 'LIVE';
-    $('midi-tag').classList.add('live');
-    log(`MIDI output selected: ${state.midiOutput.name}`, 'ok');
-  } else {
-    setPillStatus('midi', false, 'MIDI Disconnected');
-    log('Could not open MIDI output', 'err');
-  }
-}
-
-function sendMIDI(midiValue) {
-  if (!state.midiOutput || state.mappings.length === 0) return;
-
-  state.mappings.forEach(m => {
-    const channel = Math.max(1, Math.min(16, m.channel)) - 1;  // 0-indexed
-    const cc      = Math.max(0, Math.min(127, m.cc));
-    const value   = Math.max(0, Math.min(127, midiValue));
-    state.midiOutput.send([0xB0 | channel, cc, value]);
-    state.midiSentCount++;
-  });
-
-  midiCount.textContent = state.midiSentCount;
-  log(`MIDI CC → ${state.mappings.map(m=>`Ch${m.channel} CC${m.cc}`).join(', ')} [${midiValue}]`, 'midi');
-}
-
-// ═══════════════════════════════════════════════════════════
-//  MAPPINGS UI
-// ═══════════════════════════════════════════════════════════
-function renderMappings() {
-  mappingList.innerHTML = '';
-  state.mappings.forEach(m => {
-    const card = document.createElement('div');
-    card.className = 'mapping-card';
-    card.innerHTML = `
-      <div>
-        <div class="addr">Ch ${m.channel}  ·  CC ${m.cc}</div>
-        <div class="meta">MIDI Control Change · 0–127</div>
-      </div>
-      <button class="rm" data-id="${m.id}" title="Remove">×</button>
-    `;
-    card.querySelector('.rm').addEventListener('click', () => {
-      state.mappings = state.mappings.filter(x => x.id !== m.id);
-      renderMappings();
+  var ticking = false, lastP = FLOOR;
+  function onScroll(){
+    if (ticking) return;
+    ticking = true;
+    requestAnimationFrame(function(){
+      var p = currentP();
+      if (p > lastP + 0.004) { sent += Math.round((p - lastP) * 600); S.textContent = sent.toLocaleString(); }
+      lastP = p;
+      paint(p);
+      ticking = false;
     });
-    mappingList.appendChild(card);
-  });
-}
+  }
 
-$('btn-add-mapping').addEventListener('click', () => {
-  const channel = parseInt($('new-channel').value) || 1;
-  const cc      = parseInt($('new-cc').value);
-  if (isNaN(cc) || cc < 0 || cc > 127) { log('CC number must be 0–127', 'err'); return; }
-  if (channel < 1 || channel > 16)     { log('Channel must be 1–16', 'err'); return; }
-  state.mappings.push({ id: state.nextMappingId++, channel, cc, label: `Ch ${channel} CC ${cc}` });
-  renderMappings();
-  log(`Added mapping: Ch ${channel}  CC ${cc}`, 'ok');
-});
+  S.textContent = sent.toLocaleString();
 
-// ═══════════════════════════════════════════════════════════
-//  UI HELPERS
-// ═══════════════════════════════════════════════════════════
-function setPillStatus(which, ok, text) {
-  const pill = $(`pill-${which}`);
-  const span = $(`pill-${which}-text`);
-  pill.classList.toggle('ok', ok);
-  pill.classList.toggle('err', !ok);
-  span.textContent = text;
-}
+  if (reduce){
+    // Static, honest resting state — no motion.
+    paint(currentP());
+  } else {
+    // Intro tare→load so the readout reads as "alive" before any scroll.
+    var start = null, dur = 1400;
+    function intro(ts){
+      if (start === null) start = ts;
+      var t = Math.min(1, (ts - start) / dur);
+      var eased = 1 - Math.pow(1 - t, 3);
+      if (window.scrollY < 4) { paint(eased * currentP()); }
+      if (t < 1 && window.scrollY < 4) requestAnimationFrame(intro);
+      else onScroll();
+    }
+    requestAnimationFrame(intro);
+  }
 
-// Live range display
-$('smooth').addEventListener('input', e => { $('smooth-val').textContent = e.target.value; });
-$('poll-rate').addEventListener('input', e => {
-  $('poll-val').textContent = e.target.value;
-  if (state.connectionType) startPolling(); // restart with new rate
-});
-$('unit-select').addEventListener('change', () => { state.weightHistory = []; });
-
-// ═══════════════════════════════════════════════════════════
-//  INIT
-// ═══════════════════════════════════════════════════════════
-renderMappings();
-log('GRAVITAS ready — connect scale and MIDI output to begin', 'ok');
-setPillStatus('hid', false, 'Disconnected');
-setPillStatus('midi', false, 'MIDI Disconnected');
-
-if (!navigator.hid && !navigator.serial) {
-  log('⚠ Neither WebHID nor Web Serial available — use Chrome or Edge', 'err');
-  $('btn-connect-scale').disabled = true;
-} else {
-  if (!navigator.hid)    log('ℹ WebHID not available — HID scales will not work');
-  if (!navigator.serial) log('ℹ Web Serial not available — serial scales will not work');
-}
-if (!navigator.requestMIDIAccess) {
-  log('⚠ Web MIDI not available — use Chrome or Edge', 'err');
-  $('btn-connect-midi').disabled = true;
-}
+  window.addEventListener('scroll', onScroll, { passive:true });
+  window.addEventListener('resize', onScroll, { passive:true });
+})();
 </script>
 </body>
 </html>

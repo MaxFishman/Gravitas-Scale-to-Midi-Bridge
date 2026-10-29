@@ -1,6 +1,7 @@
-const CACHE_NAME = 'gravitas-v1';
+const CACHE_NAME = 'gravitas-v2';
 const ASSETS = [
   './index.html',
+  './app.html',
   './manifest.json',
   './favicon.svg',
   './icon-192.svg',

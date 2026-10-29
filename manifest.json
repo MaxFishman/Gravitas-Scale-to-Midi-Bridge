@@ -2,7 +2,7 @@
   "name": "GRAVITAS — Scale to MIDI",
   "short_name": "GRAVITAS",
   "description": "USB scale to MIDI controller via WebHID, Web Serial, and Web MIDI API",
-  "start_url": "./index.html",
+  "start_url": "./app.html",
   "display": "standalone",
   "orientation": "any",
   "background_color": "#0a0a0b",

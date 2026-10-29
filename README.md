@@ -130,7 +130,7 @@ Up and running in under two minutes.
 
 ### 1 · Launch GRAVITAS
 
-Open `index.html` in **Google Chrome** or **Microsoft Edge** (the hardware APIs require a Chromium browser). For a clean URL, serve the folder:
+Open `app.html` in **Google Chrome** or **Microsoft Edge** (the hardware APIs require a Chromium browser) — `index.html` is the product landing page. For a clean URL, serve the folder:
 
 ```bash
 npx serve .
